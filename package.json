@@ -1,0 +1,18 @@
+{
+  "name": "personal-bot",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "deploy": "wrangler deploy",
+    "dev": "wrangler dev",
+    "start": "wrangler dev",
+    "test": "vitest"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.4.5",
+    "@cloudflare/workers-types": "^4.20240722.0",
+    "typescript": "^5.5.4",
+    "vitest": "1.5.0",
+    "wrangler": "^v3.79.0"
+  }
+}

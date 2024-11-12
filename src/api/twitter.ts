@@ -1,8 +1,5 @@
-export class TwitterAPI {
-	constructor() {}
-
-	async fetchTweetIds({ userName, cookies }: { userName: string; cookies: string }): Promise<string[]> {
-		const raw_headers = `
+export const fetchTweetIds = async ({ userName, cookies }: { userName: string; cookies: string }): Promise<string[]> => {
+	const raw_headers = `
 Host: syndication.twitter.com
 User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:132.0) Gecko/20100101 Firefox/132.0
 Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8
@@ -21,41 +18,43 @@ Pragma: no-cache
 Cache-Control: no-cache
 `;
 
-		const headers = raw_headers.split('\n').reduce((acc, line) => {
-			const [key, value] = line.split(': ');
-			if (key && value) {
-				acc[key] = value;
-			}
-			return acc;
-		}, {} as Record<string, string>);
-
-		const text = await fetch(`https://syndication.twitter.com/srv/timeline-profile/screen-name/${userName}`, {
-			headers: new Headers(headers),
-		}).then((res) => {
-			return res.text();
-		});
-
-		// fuck the parsing logic, let's regex it
-		const tweetIds = text.match(/tweet-(\d{19})/g)?.map((match) => match.replace('tweet-', ''));
-		if (!tweetIds) {
-			console.info(`userName = ${userName} links not found`);
-			console.info(text);
-			return [];
+	const headers = raw_headers.split('\n').reduce((acc, line) => {
+		const [key, value] = line.split(': ');
+		if (key && value) {
+			acc[key] = value;
 		}
-		return tweetIds;
-	}
+		return acc;
+	}, {} as Record<string, string>);
 
-	async fetchTweetDetail(url: string): Promise<JSON> {
-		const fxUrl = url.replace('https://twitter.com/', 'https://api.fxtwitter.com/');
-		const r = await fetch(fxUrl, {
-			headers: new Headers({
-				'User-Agent': 'tiankaima-bot/1.0 (t.me/tiankaima)',
-			}),
-		}).then((res) => res.json());
+	const text = await fetch(`https://syndication.twitter.com/srv/timeline-profile/screen-name/${userName}`, {
+		headers: new Headers(headers),
+	}).then((res) => {
+		return res.text();
+	});
 
-		if (r['message'] !== 'OK') {
-			console.error(r);
-		}
-		return r['message'];
+	console.log(`Fetching ${userName} tweets`, text);
+
+	// fuck the parsing logic, let's regex it
+	const tweetIds = text.match(/tweet-(\d{19})/g)?.map((match) => match.replace('tweet-', ''));
+	if (!tweetIds) {
+		console.info(`userName = ${userName} links not found`);
+		return [];
 	}
-}
+	return tweetIds;
+};
+
+export const fetchTweetDetail = async (url: string): Promise<JSON> => {
+	const fxUrl = url.replace('https://twitter.com/', 'https://api.fxtwitter.com/');
+	const r = await fetch(fxUrl, {
+		headers: new Headers({
+			'User-Agent': 'tiankaima-bot/1.0 (t.me/tiankaima)',
+		}),
+	}).then((res) => res.json());
+
+	if (r['message'] !== 'OK') {
+		console.error(r);
+	}
+	return r['message'];
+};
+
+export * as TwitterAPI from './twitter';

@@ -1,5 +1,4 @@
-import { ExecutionContext, KVNamespace, ScheduledController } from '@cloudflare/workers-types/experimental';
-import { TelegramAPI } from './api/telegram';
+import { ExecutionContext } from '@cloudflare/workers-types/experimental';
 import { Env } from './env';
 import { handleMessageText } from './message';
 
@@ -11,8 +10,7 @@ export async function setWebhook(request: Request, env: Env, ctx: ExecutionConte
 		return new Response('invalid secret', { status: 403 });
 	}
 
-	const bot = new TelegramAPI({ botToken: env.ENV_BOT_TOKEN });
-	const res = await bot.setWebhook({
+	const res = await env.bot.setWebhook({
 		webhookUrl: `https://${new URL(request.url).hostname}/webhook`,
 		webhookSecret: env.ENV_BOT_SECRET,
 	});
@@ -27,8 +25,7 @@ export async function unsetWebhook(request: Request, env: Env, ctx: ExecutionCon
 		return new Response('invalid secret', { status: 403 });
 	}
 
-	const bot = new TelegramAPI({ botToken: env.ENV_BOT_TOKEN });
-	const res = await bot.setWebhook({
+	const res = await env.bot.setWebhook({
 		webhookUrl: '',
 		webhookSecret: env.ENV_BOT_SECRET,
 	});

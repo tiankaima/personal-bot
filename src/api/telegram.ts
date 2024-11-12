@@ -1,7 +1,7 @@
 export class TelegramAPI {
 	botToken: string;
 
-	constructor({ botToken }: { botToken: string }) {
+	constructor(botToken: string) {
 		this.botToken = botToken;
 	}
 

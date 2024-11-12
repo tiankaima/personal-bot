@@ -1,4 +1,4 @@
-import { ExecutionContext, KVNamespace, ScheduledController } from '@cloudflare/workers-types/experimental';
+import { ExecutionContext, ScheduledController } from '@cloudflare/workers-types/experimental';
 import { Env } from './env';
 
 import { setWebhook, unsetWebhook, handleWebhook } from './webhook';

@@ -1,13 +1,9 @@
 import { Env } from './env';
-import { TelegramAPI } from './api/telegram';
-import { TwitterAPI } from './api/twitter';
 import { scheduleJob } from './schedule';
 
 async function handleMessageStart(env: Env, chatId: string): Promise<void> {
 	// `/start`
-	const bot = new TelegramAPI({ botToken: env.ENV_BOT_TOKEN });
-
-	await bot.sendMessage({
+	await env.bot.sendMessage({
 		chatId,
 		text: `
 Welcome, your chat id is ${chatId}
@@ -19,9 +15,8 @@ Welcome, your chat id is ${chatId}
 }
 
 async function handleDebugHTML(env: Env, chatId: string): Promise<void> {
-	const bot = new TelegramAPI({ botToken: env.ENV_BOT_TOKEN });
-
-	await bot.sendMessage({
+	// `/debugHTML`
+	await env.bot.sendMessage({
 		chatId,
 		text: `
 <b>bold</b>, <strong>bold</strong>
@@ -36,15 +31,14 @@ async function handleDebugHTML(env: Env, chatId: string): Promise<void> {
 
 async function handleMessageSet(env: Env, chatId: string, text: string) {
 	// `/set KEY VALUE`
-	const bot = new TelegramAPI({ botToken: env.ENV_BOT_TOKEN });
 
 	// VALUE might contain spaces
 	const [_, key, ...valueParts] = text.split(' ');
 	const value = valueParts.join(' ');
-
 	const originalValue = await env.DATA.get(key);
+
 	await env.DATA.put(key, value);
-	await bot.sendMessage({
+	await env.bot.sendMessage({
 		chatId,
 		text: `Set ${key} from ${originalValue} to ${value}`,
 	});
@@ -52,12 +46,10 @@ async function handleMessageSet(env: Env, chatId: string, text: string) {
 
 async function handleMessageGet(env: Env, chatId: string, text: string) {
 	// `/get KEY`
-	const bot = new TelegramAPI({ botToken: env.ENV_BOT_TOKEN });
-
 	const [_, key] = text.split(' ');
-
 	const value = await env.DATA.get(key);
-	await bot.sendMessage({
+
+	await env.bot.sendMessage({
 		chatId,
 		text: `Value of ${key} is ${value}`,
 	});
@@ -65,21 +57,19 @@ async function handleMessageGet(env: Env, chatId: string, text: string) {
 
 async function handleMessageToggleTwitterUser(env: Env, chatId: string, text: string) {
 	// `/toggleTwitterUser USERNAME`
-	const bot = new TelegramAPI({ botToken: env.ENV_BOT_TOKEN });
-
 	const [_, userName] = text.split(' ');
-
 	const users = await env.DATA.get('twitter_users').then((data) => JSON.parse(data || '[]'));
 	const index = users.indexOf(userName);
+
 	if (index === -1) {
 		users.push(userName);
-		await bot.sendMessage({
+		await env.bot.sendMessage({
 			chatId,
 			text: `Added ${userName} to the list`,
 		});
 	} else {
 		users.splice(index, 1);
-		await bot.sendMessage({
+		await env.bot.sendMessage({
 			chatId,
 			text: `Removed ${userName} from the list`,
 		});

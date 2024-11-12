@@ -1,7 +1,7 @@
 import { ExecutionContext, KVNamespace } from '@cloudflare/workers-types/experimental';
 import { TelegramAPI } from './api/telegram';
 
-interface Env {
+export interface Env {
 	DATA: KVNamespace;
 	ENV_BOT_TOKEN: string;
 	ENV_BOT_SECRET: string;
@@ -12,17 +12,23 @@ interface Env {
 	get bot(): TelegramAPI;
 }
 
-(globalThis as any).ExecutionContext.prototype.load = async function <T = string[]>(key: string, defaultValue: string): Promise<T> {
-	const value = await this.DATA.get(key);
-	return JSON.parse(value || defaultValue);
-};
-
-(globalThis as any).ExecutionContext.prototype.save = async function (key: string, value: any): Promise<void> {
-	await this.DATA.put(key, JSON.stringify(value));
-};
-
-Object.defineProperty((globalThis as any).ExecutionContext.prototype, 'bot', {
-	get: function () {
-		return new TelegramAPI(this.ENV_BOT_TOKEN);
-	},
-});
+export function monkeyPatchEnv(env: Env) {
+	Object.defineProperties(env, {
+		load: {
+			value: async function <T = string[]>(key: string, defaultValue: string): Promise<T> {
+				const value = await this.DATA.get(key);
+				return JSON.parse(value || defaultValue);
+			},
+		},
+		save: {
+			value: async function (key: string, value: any): Promise<void> {
+				await this.DATA.put(key, JSON.stringify(value));
+			},
+		},
+		bot: {
+			get: function () {
+				return new TelegramAPI(this.ENV_BOT_TOKEN);
+			},
+		},
+	});
+}

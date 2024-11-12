@@ -1,15 +1,17 @@
 import { ExecutionContext, ScheduledController } from '@cloudflare/workers-types/experimental';
-import { Env } from './env';
+import { Env, monkeyPatchEnv } from './env';
 
 import { setWebhook, unsetWebhook, handleWebhook } from './webhook';
 import { scheduleJob } from './schedule';
 
 export default {
 	async scheduled(controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+		monkeyPatchEnv(env);
 		await scheduleJob(env);
 	},
 
 	async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+		monkeyPatchEnv(env);
 		const path = new URL(request.url).pathname;
 		if (path === '/setWebhook') {
 			return setWebhook(request, env, ctx);

@@ -1,5 +1,5 @@
 export class TwitterAPI {
-	constructor({}: {}) {}
+	constructor() {}
 
 	async fetchTweetIds({ userName, cookies }: { userName: string; cookies: string }): Promise<string[]> {
 		const raw_headers = `
@@ -56,20 +56,6 @@ Cache-Control: no-cache
 		if (r['message'] !== 'OK') {
 			console.error(r);
 		}
-		return r.tweet;
-	}
-
-	async fetchTweetDetails({ userName, idList }: { userName: string; idList: string[] }): Promise<JSON[]> {
-		const jobs = idList.map((tweet_id) => {
-			const url = `https://api.fxtwitter.com/${userName}/status/${tweet_id}`;
-			return fetch(url, {
-				headers: new Headers({
-					'User-Agent': 'tiankaima-bot/1.0 (t.me/tiankaima)',
-				}),
-			}).then((res) => res.json());
-		});
-
-		const results = (await Promise.all(jobs)).filter((e) => e['message'] === 'OK').map((e) => e['tweet']);
-		return results;
+		return r['message'];
 	}
 }

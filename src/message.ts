@@ -88,35 +88,6 @@ async function handleMessageToggleTwitterUser(env: Env, chatId: string, text: st
 	await env.DATA.put('twitter_users', JSON.stringify(users));
 }
 
-async function handleMessageDebug(env: Env, chatId: string): Promise<void> {
-	const bot = new TelegramAPI({ botToken: env.ENV_BOT_TOKEN });
-
-	try {
-		const twitter_api = new TwitterAPI({});
-		const ids = await twitter_api.fetchTweetIds({
-			userName: 'tiankaima',
-			cookies: (await env.DATA.get('twitter_cookies')) || '',
-		});
-		await bot.sendMessage({
-			chatId,
-			text: JSON.stringify(ids, null, 2),
-		});
-
-		const details = await twitter_api.fetchTweetDetails({ userName: 'tiankaima', idList: ids.slice(0, 2) });
-		await bot.sendMessage({
-			chatId,
-			text: JSON.stringify(details, null, 2),
-		});
-	} catch (e) {
-		await bot.sendMessage({
-			chatId,
-			text: e.message,
-		});
-	}
-
-	return;
-}
-
 export async function handleMessageText(env: Env, chatId: string, text: string): Promise<void> {
 	console.info(`Received message from ${chatId}: ${text}`);
 
@@ -143,8 +114,5 @@ export async function handleMessageText(env: Env, chatId: string, text: string):
 	if (text.startsWith('/debugSchedule')) {
 		await scheduleJob(env);
 		return;
-	}
-	if (text.startsWith('/debug')) {
-		return await handleMessageDebug(env, chatId);
 	}
 }

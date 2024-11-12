@@ -13,6 +13,8 @@ export interface Env {
 }
 
 export function monkeyPatchEnv(env: Env) {
+	if (typeof env.load === 'function' && typeof env.save === 'function') return;
+
 	Object.defineProperties(env, {
 		load: {
 			value: async function <T = string[]>(key: string, defaultValue: string): Promise<T> {

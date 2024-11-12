@@ -4,6 +4,8 @@ import { TelegramAPI } from './api/telegram';
 import { TwitterAPI } from './api/twitter';
 
 export async function updateUnsentMessage(env: Env): Promise<void> {
+	console.info('Updating unsent message');
+
 	const users = await env.DATA.get('twitter_users').then((data) => JSON.parse(data || '[]'));
 	let unsent_links = await env.DATA.get('unsent_links').then((data) => JSON.parse(data || '[]'));
 	const sent_links = await env.DATA.get('sent_links').then((data) => JSON.parse(data || '[]'));
@@ -34,6 +36,8 @@ export async function updateUnsentMessage(env: Env): Promise<void> {
 }
 
 export async function sendUnsentMessage(env: Env): Promise<void> {
+	console.info('Sending unsent message');
+
 	const bot = new TelegramAPI({ botToken: env.ENV_BOT_TOKEN });
 	let unsent_links = await env.DATA.get('unsent_links').then((data) => JSON.parse(data || '[]'));
 	let sent_links = await env.DATA.get('sent_links').then((data) => JSON.parse(data || '[]'));

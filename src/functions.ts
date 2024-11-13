@@ -8,7 +8,7 @@ export async function updateUnsentMessage(env: Env): Promise<void> {
 	const users = await env.load('twitter_users');
 	const unsent_links = await env.load('unsent_links');
 	const sent_links = await env.load('sent_links');
-	const twitter_cookies = await env.load<string>('twitter_cookies', '');
+	const twitter_cookies = (await env.DATA.get('twitter_cookies')) || '';
 
 	const updated_links = await Promise.all(
 		users.samples(10).map(async (user: string) =>

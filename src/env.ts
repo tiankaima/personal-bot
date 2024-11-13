@@ -7,7 +7,7 @@ export interface Env {
 	ENV_BOT_SECRET: string;
 	ENV_BOT_ADMIN_CHAT_ID: string;
 
-	load<T = string[]>(key: string, defaultValue: string): Promise<T>;
+	load<T = string[]>(key: string, defaultValue?: string): Promise<T>;
 	save(key: string, value: any): Promise<void>;
 	get bot(): TelegramAPI;
 }
@@ -17,7 +17,7 @@ export function monkeyPatchEnv(env: Env) {
 
 	Object.defineProperties(env, {
 		load: {
-			value: async function <T = string[]>(key: string, defaultValue: string): Promise<T> {
+			value: async function <T = string[]>(key: string, defaultValue?: string): Promise<T> {
 				const value = await this.DATA.get(key);
 				return JSON.parse(value || defaultValue);
 			},

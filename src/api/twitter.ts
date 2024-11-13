@@ -54,7 +54,7 @@ export const fetchTweetDetail = async (url: string): Promise<JSON> => {
 	if (r['message'] !== 'OK') {
 		console.error(r);
 	}
-	return r['message'];
+	return r['tweet'];
 };
 
 export * as TwitterAPI from './twitter';

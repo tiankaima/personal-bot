@@ -37,9 +37,15 @@ export async function sendUnsentMessage(env: Env): Promise<void> {
 			const e = await TwitterAPI.fetchTweetDetail(link);
 			if (e['media'] && e['media']['all'] && e['media']['all'].length > 0 && !e['text'].startsWith('RT @')) {
 				console.info(`Sending link: ${link}`);
-				await env.bot.sendMessage({
+				// await env.bot.sendMessage({
+				// 	chatId: env.ENV_BOT_ADMIN_CHAT_ID,
+				// 	text: link.replace('https://twitter.com/', 'https://fxtwitter.com/'),
+				// });
+
+				await env.bot.sendPhoto({
 					chatId: env.ENV_BOT_ADMIN_CHAT_ID,
-					text: link.replace('https://twitter.com/', 'https://fxtwitter.com/'),
+					photo: e['media']['all'][0]['url'],
+					caption: e['text'] + '\n' + link,
 				});
 			} else {
 				console.info(`No media found in link: ${link}, ignoring`);

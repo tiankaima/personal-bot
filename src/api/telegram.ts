@@ -46,6 +46,7 @@ export class TelegramAPI {
 			},
 		});
 		const r = await fetch(url).then((res) => res.json());
+		console.info(r);
 		return JSON.stringify(r);
 	}
 
@@ -70,6 +71,35 @@ export class TelegramAPI {
 			},
 		});
 		const r = await fetch(url).then((res) => res.json());
+		console.info(r);
+		return JSON.stringify(r);
+	}
+
+	async sendPhoto({
+		chatId,
+		caption,
+		photo,
+		notify = true,
+		parseMode = '',
+	}: {
+		chatId: string;
+		caption: string;
+		photo: string;
+		notify?: boolean;
+		parseMode?: string;
+	}): Promise<string> {
+		const url = this.apiUrl({
+			methodName: 'sendPhoto',
+			params: {
+				chat_id: chatId,
+				caption: caption.slice(0, 1024),
+				photo,
+				disable_notification: !notify,
+				parse_mode: parseMode,
+			},
+		});
+		const r = await fetch(url).then((res) => res.json());
+		console.info(r);
 		return JSON.stringify(r);
 	}
 }

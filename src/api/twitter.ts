@@ -51,6 +51,8 @@ export const fetchTweetDetail = async (url: string): Promise<JSON> => {
 		}),
 	}).then((res) => res.json());
 
+	console.info(r);
+
 	if (r['message'] !== 'OK') {
 		console.error(r);
 	}

@@ -11,7 +11,7 @@ export async function updateUnsentMessage(env: Env): Promise<void> {
 	const twitter_cookies = (await env.DATA.get('twitter_cookies')) || '';
 
 	const updated_links = await Promise.all(
-		users.samples(10).map(async (user: string) =>
+		users.samples(2).map(async (user: string) =>
 			TwitterAPI.fetchTweetIds({
 				userName: user,
 				cookies: twitter_cookies,
@@ -37,26 +37,24 @@ export async function sendUnsentMessage(env: Env): Promise<void> {
 			const e = await TwitterAPI.fetchTweetDetail(link);
 			if (e['media'] && e['media']['all'] && e['media']['all'].length > 0 && !e['text'].startsWith('RT @')) {
 				console.info(`Sending link: ${link}`);
-				// await env.bot.sendMessage({
-				// 	chatId: env.ENV_BOT_ADMIN_CHAT_ID,
-				// 	text: link.replace('https://twitter.com/', 'https://fxtwitter.com/'),
-				// });
+				const text = e['text'].length > 0 ? `\n${e['text']}\n` : '';
+				const dateString = new Date(Date.parse(e['created_at'])).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' });
 
 				await env.bot.sendPhoto({
 					chatId: env.ENV_BOT_ADMIN_CHAT_ID,
 					photo: e['media']['all'][0]['url'],
 					caption: `
-<a href=${e['author']['url']}>@${e['author']['screen_name']}</a>
-=====
-${e['text']}
+<b>${e['author']['name']}</b>   <a href="${e['author']['url']}">@${e['author']['screen_name']}</a>
+${text}
+🍭${dateString}
 
-<a href=${link}>Link</a> @ ${e['created_at']}
+<a href="${link}">✨ Original Link ✨</a>
 `,
 					parseMode: 'HTML',
-					notify: false
+					notify: false,
 				});
 			} else {
-				console.info(`No media found in link: ${link}, ignoring`);
+				console.info(`No media found in link / It's a retweet: ${link}, ignoring`);
 			}
 
 			sent_links.push(link);

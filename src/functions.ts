@@ -45,7 +45,15 @@ export async function sendUnsentMessage(env: Env): Promise<void> {
 				await env.bot.sendPhoto({
 					chatId: env.ENV_BOT_ADMIN_CHAT_ID,
 					photo: e['media']['all'][0]['url'],
-					caption: e['text'] + '\n' + link,
+					caption: `
+<a href=${e['author']['url']}>@${e['author']['screen_name']}</a>
+=====
+${e['text']}
+
+<a href=${link}>Link</a> @ ${e['created_at']}
+`,
+					parseMode: 'HTML',
+					notify: false
 				});
 			} else {
 				console.info(`No media found in link: ${link}, ignoring`);

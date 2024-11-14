@@ -18,6 +18,11 @@ export async function updateUnsentMessage(env: Env): Promise<void> {
 			}).then((ids) => ids.map((id) => `https://twitter.com/${user}/status/${id}`))
 		)
 	).then((e) => e.flat().filter((link) => !sent_links.includes(link)));
+	if (updated_links.length === 0) {
+		console.info('No new links found');
+		return;
+	}
+
 	console.info('Updated links:', updated_links);
 
 	await env.DATA.put('unsent_links', JSON.stringify(Array.from(new Set([...unsent_links, ...updated_links]))));

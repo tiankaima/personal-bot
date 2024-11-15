@@ -18,7 +18,7 @@ export async function updateUnsentMessage(env: Env): Promise<void> {
 			}).then((ids) => ids.map((id) => `https://twitter.com/${user}/status/${id}`))
 		)
 	).then((e) => e.flat().filter((link) => !sent_links.includes(link)));
-	if (updated_links.length === 0) {
+	if (updated_links.length === 0 || updated_links.every((link) => unsent_links.includes(link))) {
 		console.info('No new links found');
 		return;
 	}

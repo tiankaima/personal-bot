@@ -32,7 +32,7 @@ Cache-Control: no-cache
 		return res.text();
 	});
 
-	console.log(`Fetching ${userName} tweets`, text);
+	console.log(`Fetching ${userName} tweets`);
 
 	// fuck the parsing logic, let's regex it
 	const tweetIds = text.match(/tweet-(\d{19})/g)?.map((match) => match.replace('tweet-', ''));

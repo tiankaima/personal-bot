@@ -25,7 +25,7 @@ export async function updateUnsentMessage(env: Env): Promise<void> {
 
 	console.info('Updated links:', updated_links);
 
-	await env.DATA.put('unsent_links', JSON.stringify(Array.from(new Set([...unsent_links, ...updated_links]))));
+	await env.save('unsent_links', Array.from(new Set([...unsent_links, ...updated_links])));
 }
 
 export async function sendUnsentMessage(env: Env): Promise<void> {
@@ -61,14 +61,14 @@ ${text}
 			} else {
 				console.info(`No media found in link / It's a retweet: ${link}, ignoring`);
 			}
-
 			sent_links.push(link);
-			await env.save('unsent_links', unsent_links);
-			await env.save('sent_links', sent_links);
 		}
 	} catch (e) {
 		console.error(e);
 	}
+
+	await env.save('unsent_links', unsent_links);
+	await env.save('sent_links', sent_links);
 
 	console.log(`Total sent count = ${10 - send_counters}`);
 }

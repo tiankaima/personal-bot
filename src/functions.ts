@@ -35,10 +35,10 @@ export async function sendUnsentMessage(env: Env): Promise<void> {
 	let sent_links = await env.load('sent_links');
 	let send_counters = 10;
 
-	try {
-		while (unsent_links.length > 0 && send_counters-- > 0) {
-			const link = unsent_links.pop()!;
+	while (unsent_links.length > 0 && send_counters-- > 0) {
+		const link = unsent_links.pop()!;
 
+		try {
 			const e = await TwitterAPI.fetchTweetDetail(link);
 			if (e['media'] && e['media']['all'] && e['media']['all'].length > 0 && !e['text'].startsWith('RT @')) {
 				console.info(`Sending link: ${link}`);
@@ -61,10 +61,10 @@ ${text}
 			} else {
 				console.info(`No media found in link / It's a retweet: ${link}, ignoring`);
 			}
+		} catch (e) {
+			console.error(e);
 			sent_links.push(link);
 		}
-	} catch (e) {
-		console.error(e);
 	}
 
 	await env.save('unsent_links', unsent_links);

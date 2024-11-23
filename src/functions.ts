@@ -63,8 +63,9 @@ ${text}
 			}
 		} catch (e) {
 			console.error(e);
-			sent_links.push(link);
 		}
+
+		sent_links.push(link);
 	}
 
 	await env.save('unsent_links', unsent_links);

@@ -3,8 +3,6 @@ services:
         build:
             context: .
             dockerfile: Dockerfile
-        ports:
-            - "8080:8080"
         depends_on:
             - redis
         env_file:
@@ -12,7 +10,5 @@ services:
 
     redis:
         image: "redis:latest"
-        ports:
-            - "6379:6379"
         volumes:
             - ./redis-data:/data

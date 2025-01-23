@@ -13,10 +13,9 @@ async def start(update: MessageUpdate, context: CommandContext) -> None:
 async def help_command(update: MessageUpdate, context: CommandContext) -> None:
     await update.message.reply_text("""
     Available commands:
-    /start - Start a conversation
-    /set_openai_key <your_openai_api_key> - Set your OpenAI API key
-    /set_openai_endpoint [<your_openai_api_endpoint>] - Set your OpenAI API endpoint
-    /set_openai_model [<your_openai_model>] - Set your OpenAI model
+    /set_openai_key <your_openai_api_key>
+    /set_openai_endpoint <your_openai_api_endpoint>
+    /set_openai_model <your_openai_model>
     """)
     logger.debug(f"Help command used by user {update.message.from_user.id}")
 
@@ -37,7 +36,7 @@ async def set_openai_key(update: MessageUpdate, context: CommandContext) -> None
 @command_handler
 async def set_openai_endpoint(update: MessageUpdate, context: CommandContext) -> None:
     if len(context.args) > 1:
-        await update.message.reply_text('Usage: /set_openai_endpoint [<your_openai_api_endpoint>]')
+        await update.message.reply_text('Usage: /set_openai_endpoint <your_openai_api_endpoint>')
         logger.warning(f"Invalid OpenAI endpoint format from user {update.message.from_user.id}")
         return
 
@@ -50,7 +49,7 @@ async def set_openai_endpoint(update: MessageUpdate, context: CommandContext) ->
 @command_handler
 async def set_openai_model(update: MessageUpdate, context: CommandContext) -> None:
     if len(context.args) > 1:
-        await update.message.reply_text('Usage: /set_openai_model [<your_openai_model>]')
+        await update.message.reply_text('Usage: /set_openai_model <your_openai_model>')
         logger.warning(f"Invalid OpenAI model format from user {update.message.from_user.id}")
         return
 

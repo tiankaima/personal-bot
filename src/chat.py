@@ -23,28 +23,31 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
 
     # Check interaction limit
     current_time = datetime.now()
-    interaction_times: List[datetime] = await redis_client.lrange(interaction_key, 0, -1) # type: ignore
-    # interaction_times = [ts for ts in interaction_times if current_time - ts < TIME_WINDOW]
+    interaction_times_raw: List[bytes] = await redis_client.lrange(interaction_key, 0, -1)  # type: ignore
+    interaction_times = [datetime.fromtimestamp(float(ts.decode('utf-8'))) for ts in interaction_times_raw if current_time - datetime.fromtimestamp(float(ts.decode('utf-8'))) < TIME_WINDOW]
 
     if len(interaction_times) >= INTERACTION_LIMIT:
         await update.message.reply_text('Interaction limit reached. Please try again later.')
         logger.warning(f"Rate limit exceeded for user {user_id}")
         return
 
+    # Record interaction time
+    await redis_client.rpush(interaction_key, current_time.timestamp())  # type: ignore
+    await redis_client.ltrim(interaction_key, -INTERACTION_LIMIT, -1)  # type: ignore
+
     # Get context messages
     messages = []
     if update.message.reply_to_message:
         replied_message_id = update.message.reply_to_message.message_id
-        replied_message = await redis_client.hget(user_key, str(replied_message_id)) # type: ignore
+        replied_message = await redis_client.hget(user_key, str(replied_message_id))  # type: ignore
         if replied_message:
             messages = json.loads(replied_message.decode('utf-8'))
             logger.debug(f"Added context from replied message {replied_message_id}")
     else:
         # Add system prompt for new conversations
         messages = [{
-            "role": "system", 
+            "role": "system",
             "content": f"""
-- Date: {current_time.strftime("%Y-%m-%d %H:%M:%S")}(UTC)
 - User: @{update.message.from_user.username}, {update.message.from_user.first_name} {update.message.from_user.last_name}
 - Prefer the output in HTML instead of markdown, use these tags: <b/>(<strong/>), <i/>(<em/>), <code/>, <s/>(<strike/>, <del/>), <pre language="python">code</pre>
 - NO <p> is needed, nor those <br/> tags, just plain text with the tags above.
@@ -59,7 +62,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
     })
 
     # save message to Redis
-    await redis_client.hset(user_key, str(message_id), json.dumps(messages)) # type: ignore
+    await redis_client.hset(user_key, str(message_id), json.dumps(messages))  # type: ignore
 
     # Get OpenAI API key and endpoint from Redis
     openai_api_key = await redis_client.get(f"user:{user_id}:openai_api_key")
@@ -90,10 +93,36 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         )
 
         reply = await update.message.reply_text("...", reply_to_message_id=message_id)
-        replies = [reply]
+        replies = []
         msg = ""
         buffer = ""
         start = 0
+
+        async def try_send_html_message(message: str, start: int, end: int, reply_obj) -> tuple[bool, int]:
+            """Try to send message with HTML formatting, trimming back to newlines if needed.
+            Returns (success, new_end_position)"""
+            test_end = end
+            while test_end > start:
+                try:
+                    await reply_obj.edit_text(
+                        message[start:test_end],
+                        parse_mode="HTML"
+                    )
+                    return True, test_end
+                except Exception as e:
+                    logger.error(f"Error editing message: {e}", exc_info=True)
+                    logger.debug(f"Failed message content: {message[start:test_end]}")
+                    # Try previous newline
+                    test_end -= 1
+                    while test_end > start and message[test_end] not in ["\n", " "]:
+                        test_end -= 1
+                    # If cursor went back to start, send whole message as plain text
+                    if test_end <= start:
+                        await reply_obj.edit_text(message[start:end])
+                        return False, end
+
+            await reply_obj.edit_text(message[start:end])
+            return False, end
 
         async for chunk in stream:
             new_msg = chunk.choices[0].delta.content or ""
@@ -104,34 +133,24 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
                 buffer = ""
 
                 if len(msg) - start <= 2000:
-                    try:
-                        await reply.edit_text(msg[start:], parse_mode="HTML")
-                    except Exception as e:
-                        logger.error(f"Error editing message: {e}", exc_info=True)
-                        logger.debug(f"Failed message content: {msg[start:]}")
-                        await reply.edit_text(msg[start:])
+                    success, _ = await try_send_html_message(msg, start, len(msg), reply)
                 else:
-                    # move start to nearest previous newline:
-                    new_start = start + 2000
-                    while new_start > 0 and msg[new_start] != "\n":
+                    # Try to break around 2000 chars
+                    new_start = min(start + 2000, len(msg))
+                    while new_start > start and msg[new_start] not in ["\n", " "]:
                         new_start -= 1
                     new_start += 1
 
-                    try:
-                        await reply.edit_text(msg[start:new_start], parse_mode="HTML")
-                    except Exception as e:
-                        logger.error(f"Error editing message: {e}", exc_info=True)
-                        logger.debug(f"Failed message content: {msg[start:new_start]}")
-                        await reply.edit_text(msg[start:new_start])
+                    success, new_start = await try_send_html_message(msg, start, new_start, reply)
                     start = new_start
 
-                    try:
-                        reply = await update.message.reply_text(msg[start:], reply_to_message_id=message_id, parse_mode="HTML")
-                    except Exception as e:
-                        logger.error(f"Error sending message: {e}", exc_info=True)
-                        logger.debug(f"Failed message content: {msg[start:]}")
-                        reply = await update.message.reply_text(msg[start:], reply_to_message_id=message_id)
                     replies.append(reply)
+                    reply = await update.message.reply_text("...", reply_to_message_id=message_id)
+
+                    # Send next message
+                    success, _ = await try_send_html_message(msg, start, len(msg), reply)
+                    if success:
+                        replies.append(reply)
 
         msg += buffer
         try:
@@ -146,13 +165,10 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             "role": "assistant",
             "content": msg
         })
-        
-        for reply in replies:
-            await redis_client.hset(user_key, str(reply.message_id), json.dumps(messages)) # type: ignore
 
-        # Record interaction time
-        await redis_client.rpush(interaction_key, current_time.timestamp()) # type: ignore
-        await redis_client.ltrim(interaction_key, -INTERACTION_LIMIT, -1) # type: ignore
+        for reply in replies:
+            await redis_client.hset(user_key, str(reply.message_id), json.dumps(messages))  # type: ignore
+
         logger.info(f"Successfully processed message for user {user_id}")
     except Exception as e:
         logger.error(f"Error calling OpenAI API: {e}", exc_info=True)

@@ -5,6 +5,8 @@ from typing import List
 import json
 from telegram import Update
 from telegram.ext import CallbackContext
+from openai.types.chat.chat_completion_tool_param import ChatCompletionToolParam
+from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
 
 # Interaction limit
 INTERACTION_LIMIT = 10
@@ -19,7 +21,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
     user_key = f"user:{user_id}:messages"
     interaction_key = f"user:{user_id}:interactions"
 
-    logger.debug(f"Processing message from user {user_id}")
+    logger.info(f"Processing message from user {user_id}")
 
     # Check interaction limit
     current_time = datetime.now()
@@ -42,7 +44,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         replied_message = await redis_client.hget(user_key, str(replied_message_id))  # type: ignore
         if replied_message:
             messages = json.loads(replied_message.decode('utf-8'))
-            logger.debug(f"Added context from replied message {replied_message_id}")
+            logger.info(f"Added context from replied message {replied_message_id}")
     else:
         # Add system prompt for new conversations
         messages = [{
@@ -81,56 +83,74 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         )
         if openai_api_endpoint:
             client.base_url = openai_api_endpoint.decode('utf-8')
-            logger.debug(f"Using custom OpenAI endpoint for user {user_id}")
 
         model = openai_model.decode('utf-8') if openai_model else "gpt-4"
         logger.info(f"Using model {model} for user {user_id}")
 
-        stream = await client.chat.completions.create(
-            model=model,
-            messages=messages,
-            stream=True
-        )
+        tools: List[ChatCompletionToolParam] = [{
+            "type": "function",
+            "function": {
+                "name": "get_current_time",
+                "description": "Get the current time",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+
+                    },
+                    "required": [],
+                    "additionalProperties": False
+                },
+            }
+        }]
 
         reply = await update.message.reply_text("...", reply_to_message_id=message_id)
-        replies = []
-        msg = ""
-        buffer = ""
-        start = 0
 
-        async def try_send_html_message(message: str, start: int, end: int, reply_obj) -> tuple[bool, int]:
-            """Try to send message with HTML formatting, trimming back to newlines if needed.
-            Returns (success, new_end_position)"""
-            test_end = end
-            while test_end > start:
-                try:
-                    await reply_obj.edit_text(
-                        message[start:test_end],
-                        parse_mode="HTML"
-                    )
-                    return True, test_end
-                except Exception as e:
-                    logger.error(f"Error editing message: {e}", exc_info=True)
-                    logger.debug(f"Failed message content: {message[start:test_end]}")
-                    # Try previous newline
-                    test_end -= 1
-                    while test_end > start and message[test_end] not in ["\n", " "]:
+        for _ in range(10):
+            logger.info(f"messages: {json.dumps(messages)}")
+
+            stream = await client.chat.completions.create(
+                model=model,
+                messages=messages,
+                tools=tools,
+                stream=True
+            )
+
+            replies = []
+            msg = ""
+            buffer = ""
+            start = 0
+            tool_calls: dict[int, ChoiceDeltaToolCall] = {}
+
+            async def try_send_html_message(message: str, start: int, end: int, reply_obj) -> tuple[bool, int]:
+                logger.info(f"try_send_html_message: {message[start:end]}")
+
+                """Try to send message with HTML formatting, trimming back to newlines if needed.
+                Returns (success, new_end_position)"""
+                test_end = end
+                while test_end > start:
+                    try:
+                        await reply_obj.edit_text(
+                            message[start:test_end],
+                            parse_mode="HTML"
+                        )
+                        return True, test_end
+                    except Exception as e:
+                        logger.error(f"Error editing message: {e}", exc_info=True)
+                        logger.debug(f"Failed message content: {message[start:test_end]}")
+                        # Try previous newline
                         test_end -= 1
-                    # If cursor went back to start, send whole message as plain text
-                    if test_end <= start:
-                        await reply_obj.edit_text(message[start:end])
-                        return False, end
+                        while test_end > start and message[test_end] not in ["\n", " "]:
+                            test_end -= 1
+                        # If cursor went back to start, send whole message as plain text
+                        if test_end <= start:
+                            await reply_obj.edit_text(message[start:end])
+                            return False, end
 
-            await reply_obj.edit_text(message[start:end])
-            return False, end
+                await reply_obj.edit_text(message[start:end])
+                return False, end
 
-        async for chunk in stream:
-            new_msg = chunk.choices[0].delta.content or ""
-            buffer += new_msg
-
-            if len(buffer.rstrip()) > 200:
-                msg += buffer
-                buffer = ""
+            async def try_send_message():
+                nonlocal start, msg, replies, reply
 
                 if len(msg) - start <= 2000:
                     success, _ = await try_send_html_message(msg, start, len(msg), reply)
@@ -152,22 +172,72 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
                     if success:
                         replies.append(reply)
 
-        msg += buffer
-        try:
-            await reply.edit_text(msg[start:], parse_mode="HTML")
-        except Exception as e:
-            logger.error(f"Error editing final message: {e}", exc_info=True)
-            logger.debug(f"Failed message content: {msg[start:]}")
-            await reply.edit_text(msg[start:])
+            async for chunk in stream:
+                for tool_call in chunk.choices[0].delta.tool_calls or []:
+                    if (index := tool_call.index) not in tool_calls:
+                        tool_calls[index] = tool_call
 
-        # Add assistant response and save to Redis
-        messages.append({
-            "role": "assistant",
-            "content": msg
-        })
+                    tool_calls[index].function.arguments += tool_call.function.arguments  # type: ignore
 
-        for reply in replies:
-            await redis_client.hset(user_key, str(reply.message_id), json.dumps(messages))  # type: ignore
+                new_msg = chunk.choices[0].delta.content or ""
+                buffer += new_msg
+
+                if len(buffer.rstrip()) > 200:
+                    msg += buffer
+                    buffer = ""
+                    await try_send_message()
+
+            msg += buffer
+            msg = msg.strip()
+
+            tool_calls_json = [
+                {
+                    "id": tool_call.id,
+                    "type": "function",
+                    "function": {
+                        "name": tool_call.function.name,  # type: ignore
+                        "arguments": tool_call.function.arguments  # type: ignore
+                    }
+                }
+                for tool_call in tool_calls.values()
+            ]
+
+            logger.info(f"Tool calls: {tool_calls_json}")
+
+            if len(tool_calls_json) > 0:
+                messages.append({
+                    "role": "assistant",
+                    "content": msg,
+                    "tool_calls": tool_calls_json
+                })
+            else:
+                messages.append({
+                    "role": "assistant",
+                    "content": msg
+                })
+
+            for tool_call in tool_calls.values():
+                if tool_call.function.name == "get_current_time":  # type: ignore
+                    time = datetime.now()
+                    time_str = time.strftime("%Y-%m-%d %H:%M:%S")
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": f"The current time is {time_str}. (UTC)"
+                    })
+
+            logger.info(f"messages: {json.dumps(messages)}")
+
+            for reply in replies:
+                await redis_client.hset(user_key, str(reply.message_id), json.dumps(messages))  # type: ignore
+
+            if len(msg) > 0:
+                await try_send_message()
+
+            if len(msg) > 0 and len(tool_calls) == 0:
+                break
+        else:
+            logger.error(f"Something went wrong, retrying...")
 
         logger.info(f"Successfully processed message for user {user_id}")
     except Exception as e:

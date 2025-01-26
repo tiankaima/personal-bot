@@ -1,0 +1,17 @@
+services:
+    app:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        depends_on:
+            - redis
+        env_file:
+            - .env
+        command: ["sh", "-c", "pip install debugpy -t /tmp && python /tmp/debugpy --wait-for-client --listen 0.0.0.0:5678 /app/main.py"]
+        ports:
+            - 5678:5678
+
+    redis:
+        image: "redis:latest"
+        volumes:
+            - ./redis-data:/data

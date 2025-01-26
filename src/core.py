@@ -1,6 +1,6 @@
 import logging
 from dotenv import load_dotenv
-import redis
+import redis.asyncio as redis
 
 # Load environment variables from .env file
 load_dotenv()

@@ -1,30 +1,30 @@
 services:
-    bot-app:
-        container_name: bot-app
+    app:
+        container_name: app
         build:
             context: .
             dockerfile: Dockerfile
         depends_on:
-            - bot-redis
+            - redis
         env_file:
             - .env
 
-    bot-redis:
-        container_name: bot-redis
+    redis:
+        container_name: redis
         image: "redis:latest"
         volumes:
             - ./redis-data:/data
 
-    bot-watchtower:
-        container_name: bot-watchtower
+    watchtower:
+        container_name: watchtower
         image: "containrrr/watchtower"
         environment:
             - WATCHTOWER_POLL_INTERVAL=30
             - WATCHTOWER_CLEANUP=true
         volumes:
             - /var/run/docker.sock:/var/run/docker.sock
-        command: bot-app
+        command: app
         restart: always
         depends_on:
-            - bot-app
-            - bot-redis
+            - app
+            - redis

@@ -111,7 +111,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             stream = await client.chat.completions.create(
                 model=model,
                 messages=messages,
-                tools=tools,
+                # tools=tools,
                 stream=True
             )
 

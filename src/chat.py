@@ -101,7 +101,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
                 },
             }
         }]
-        tools = [] # temporary fix since deepseek-chat is having issues with tools with the current model
+        tools = []  # temporary fix since deepseek-chat is having issues with tools with the current model
 
         reply = await update.message.reply_text("...", reply_to_message_id=message_id)
 
@@ -135,6 +135,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
                         )
                         return True, test_end
                     except Exception as e:
+                        await reply_obj.edit_text(message[start:test_end])
                         logger.error(f"Error editing message: {e}", exc_info=True)
                         logger.debug(f"Failed message content: {message[start:test_end]}")
                         # Try previous newline

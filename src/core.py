@@ -17,10 +17,5 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Initialize Redis
-try:
-    redis_client = redis.StrictRedis(host='redis', port=6379, db=0)
-    redis_client.ping()  # Test connection
-    logger.info("Successfully connected to Redis")
-except redis.ConnectionError as e:
-    logger.error(f"Failed to connect to Redis: {e}")
-    raise
+redis_client = redis.StrictRedis(host='redis', port=6379, db=0)
+

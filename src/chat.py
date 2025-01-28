@@ -136,19 +136,19 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
                         return True, test_end
                     except Exception as e:
                         await reply_obj.edit_text(message[start:test_end])
-                        logger.error(f"Error editing message: {e}", exc_info=True)
-                        logger.debug(f"Failed message content: {message[start:test_end]}")
+                        
                         # Try previous newline
                         test_end -= 1
                         while test_end > start and message[test_end] not in ["\n", " "]:
                             test_end -= 1
-                        # If cursor went back to start, send whole message as plain text
-                        if test_end <= start:
-                            await reply_obj.edit_text(message[start:end])
-                            return False, end
 
-                await reply_obj.edit_text(message[start:end])
-                return False, end
+                try:
+                    await reply_obj.edit_text(message[start:end])
+                    logger.warning(f"Failed to send message with HTML formatting, sending plain text instead")
+                    return False, end
+                except Exception as e:
+                    logger.error(f"Error editing message: {e}", exc_info=True)
+                    return False, end
 
             async def try_send_message():
                 nonlocal start, msg, replies, reply

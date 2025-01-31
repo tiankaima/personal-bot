@@ -8,23 +8,13 @@ services:
             - redis
         env_file:
             - .env
+        develop:
+            watch:
+                - action: rebuild
+                  path: ./src
 
     redis:
         container_name: redis
         image: "redis:latest"
         volumes:
             - ./redis-data:/data
-
-    watchtower:
-        container_name: watchtower
-        image: "containrrr/watchtower"
-        environment:
-            - WATCHTOWER_POLL_INTERVAL=30
-            - WATCHTOWER_CLEANUP=true
-        volumes:
-            - /var/run/docker.sock:/var/run/docker.sock
-        command: app
-        restart: always
-        depends_on:
-            - app
-            - redis

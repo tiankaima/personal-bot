@@ -166,7 +166,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
 
             reply_msg += chunk.choices[0].delta.content or ""
 
-            if len(reply_msg[reply_msg_start:]) > 200:
+            if len(reply_msg[reply_msg_last_sent_end_pos:]) > 200:
                 await update_reply_msg_to_user()
 
         if len(reply_msg) > 0:

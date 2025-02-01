@@ -1,10 +1,11 @@
 from datetime import datetime, timedelta
 from core import logger, redis_client
-from utils import clean_html, get_web_content
+from utils import clean_html, get_web_content, fetch_tweet_info
 import openai
 from typing import List
 import json
-from telegram import Update, Message
+import re
+from telegram import Update, Message, InputMediaPhoto, InputMediaVideo, LinkPreviewOptions
 from telegram.ext import CallbackContext
 from openai.types.chat.chat_completion_tool_param import ChatCompletionToolParam
 from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
@@ -46,6 +47,52 @@ TOOLS: List[ChatCompletionToolParam] = [
     }
 ]
 
+TWITTER_URL_REGEX = re.compile(r"https://(x|twitter)\.com/[^/]+/status/\d+")
+
+
+async def handle_twitter_url(url: str, update: Update, context: CallbackContext) -> None:
+    info = await fetch_tweet_info(url)
+
+    create_timestamp = datetime.fromtimestamp(info['tweet']['created_timestamp'])
+    create_timestamp_str = create_timestamp.strftime("%Y/%m/%d %H:%M:%S")
+
+    def info_to_caption(info: dict) -> str:
+        if len(info['text']):
+            return f"""
+<b>{info['author']['name']}</b> (<a href="{info['author']['url']}">@{info['author']['screen_name']}</a>)
+
+{info['text']}
+
+<a href="{url}">{create_timestamp_str}</a>
+"""
+        else:
+            return f"""
+<b>{info['author']['name']}</b> (<a href="{info['author']['url']}">@{info['author']['screen_name']}</a>)
+
+<a href="{url}">{create_timestamp_str}</a>
+"""
+
+    caption = info_to_caption(info['tweet'])
+
+    if "quote" in info['tweet']:
+        caption += "<blockquote>"
+        caption += info_to_caption(info['tweet']['quote'])
+        caption += "</blockquote>"
+
+    if "media" in info['tweet']:
+        medias = []
+
+        for media in info['tweet']['media']['all']:
+            if media['type'] == 'photo':
+                medias.append(InputMediaPhoto(media['url']))
+            elif media['type'] == 'video':
+                medias.append(InputMediaVideo(media['url']))
+
+        await update.message.reply_media_group(medias, reply_to_message_id=update.message.message_id, caption=caption, parse_mode="HTML")
+
+    else:
+        await update.message.reply_text(caption, parse_mode="HTML", reply_to_message_id=update.message.message_id, link_preview_options=LinkPreviewOptions(is_disabled=True))
+
 
 async def handle_message(update: Update, context: CallbackContext) -> None:
     if not update.message or not update.message.from_user:
@@ -53,6 +100,10 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
 
     if not update.message.text or not len(update.message.text):
         logger.warning(f"Empty message from user {update.message.from_user.id}")
+        return
+
+    if TWITTER_URL_REGEX.match(update.message.text):
+        await handle_twitter_url(update.message.text, update, context)
         return
 
     user_id = update.message.from_user.id

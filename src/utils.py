@@ -144,22 +144,13 @@ async def get_web_content(url: str) -> str:
         response = await client.get(url)
         return clean_web_html(response.text)
 
-
-async def fetch_tweet_info(url: str) -> str:
-    async with httpx.AsyncClient() as client:
-        url = url.replace("x.com", "twitter.com").replace('twitter.com', 'api.fxtwitter.com')
-
-        response = await client.get(url)
-        return json.loads(response.text)
-
 if __name__ == "__main__":
-    # for test_case in TEST_CASES:
-    #     print(clean_html(test_case))
-    #     print("-" * 100)
+    for test_case in TEST_CASES:
+        print(clean_html(test_case))
+        print("-" * 100)
 
-    # for test_case in WEB_TEST_CASES:
-    #     print(clean_web_html(test_case))
-    #     print("-" * 100)
+    for test_case in WEB_TEST_CASES:
+        print(clean_web_html(test_case))
+        print("-" * 100)
 
-    # asyncio.run(get_web_content("https://www.google.com"))
-    asyncio.run(fetch_tweet_info("https://x.com/elonmusk/status/1885293172458242296"))
+    asyncio.run(get_web_content("https://www.google.com"))

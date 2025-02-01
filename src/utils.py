@@ -100,8 +100,8 @@ WEB_TEST_CASES = [
     """
 ]
 
-TAGS_TO_KEEP = ["body", "h1", "h2", "h3", "h4", "h5", "h6", "p", "a", "img", "ul", "ol", "li", "blockquote", "code", "pre", "table", "thead", "tbody", "tfoot", "tr", "td", "th"]
-ATTRIBUTES_TO_KEEP = ["src", "href", "alt"]
+TAGS_TO_KEEP = ["body", "h1", "h2", "h3", "h4", "h5", "h6", "p", "a", "ul", "ol", "li", "blockquote", "code", "pre", "table", "thead", "tbody", "tfoot", "tr", "td", "th"]
+ATTRIBUTES_TO_KEEP = ["alt"]
 
 
 def clean_web_html(html: str) -> str:

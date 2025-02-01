@@ -219,11 +219,13 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
                 "tool_calls": tool_calls_json
             })
             await add_tool_calls_results(tool_calls)
+            return False
         else:
             messages.append({
                 "role": "assistant",
                 "content": reply_msg
             })
+            return True
 
     current_reply_obj = await update.message.reply_text("...", reply_to_message_id=message_id)
 
@@ -233,12 +235,16 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         reply_msg_start = 0
         reply_msg_last_sent_end_pos = 0
 
-        await get_assistant_reply()
+        no_tool_call = await get_assistant_reply()
         for reply in replies:
             # store message to Redis
             await redis_client.hset(user_key, str(reply.message_id), json.dumps(messages))  # type: ignore
 
-        if len(reply_msg.strip(" \n\t")) > 0:
+        if no_tool_call and len(reply_msg.strip(" \n\t")) > 0:
             break
+    else:
+        await update.message.reply_text("I'm sorry, but I'm having trouble understanding your message. Please try again.")
+        logger.error(f"Failed to process message for user {user_id}")
+        return
 
     logger.info(f"Successfully processed message for user {user_id}")

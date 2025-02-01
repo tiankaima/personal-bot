@@ -26,7 +26,7 @@ import re
 import json
 from datetime import datetime
 import random
-
+import asyncio
 
 TWITTER_COOKIE = os.getenv("TWITTER_COOKIE")
 if not TWITTER_COOKIE:
@@ -197,6 +197,8 @@ async def check_for_new_tweets(context: CallbackContext):
                 await send_tweet(tweet_url, context, chat_id)
             except Exception as e:
                 logger.error(f"Error sending tweet {tweet_url} to chat {chat_id}: {e}")
+
+        await asyncio.sleep(random.randint(1, 3))
 
         # mark the tweet as sent
         await redis_client.set(f"tweet_id_sent:{tweet_url}", 1)

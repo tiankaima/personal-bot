@@ -3,7 +3,7 @@ from core import logger, redis_client
 import openai
 from typing import List
 import json
-from telegram import Update
+from telegram import Update, Message
 from telegram.ext import CallbackContext
 from openai.types.chat.chat_completion_tool_param import ChatCompletionToolParam
 from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
@@ -11,11 +11,33 @@ from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
 # Interaction limit
 INTERACTION_LIMIT = 10
 TIME_WINDOW = timedelta(minutes=1)
+TELEGRAM_MESSAGE_MAX_LENGTH = 2000
+MAX_RETRIES = 3
+TOOLS: List[ChatCompletionToolParam] = [{
+    "type": "function",
+    "function": {
+            "name": "get_current_time",
+            "description": "Get the current time",
+            "parameters": {
+                "type": "object",
+                "properties": {
+
+                },
+                "required": [],
+                "additionalProperties": False
+            },
+    }
+}]
 
 
 async def handle_message(update: Update, context: CallbackContext) -> None:
     if not update.message or not update.message.from_user:
         return
+
+    if not update.message.text or not len(update.message.text):
+        logger.warning(f"Empty message from user {update.message.from_user.id}")
+        return
+
     user_id = update.message.from_user.id
     message_id = update.message.message_id
     user_key = f"user:{user_id}:messages"
@@ -24,9 +46,9 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
     logger.info(f"Processing message from user {user_id}")
 
     # Check interaction limit
-    current_time = datetime.now()
     interaction_times_raw: List[bytes] = await redis_client.lrange(interaction_key, 0, -1)  # type: ignore
-    interaction_times = [datetime.fromtimestamp(float(ts.decode('utf-8'))) for ts in interaction_times_raw if current_time - datetime.fromtimestamp(float(ts.decode('utf-8'))) < TIME_WINDOW]
+    interaction_times_decoded = [datetime.fromtimestamp(float(ts.decode('utf-8'))) for ts in interaction_times_raw]
+    interaction_times = [ts for ts in interaction_times_decoded if datetime.now() - ts < TIME_WINDOW]
 
     if len(interaction_times) >= INTERACTION_LIMIT:
         await update.message.reply_text('Interaction limit reached. Please try again later.')
@@ -34,7 +56,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         return
 
     # Record interaction time
-    await redis_client.rpush(interaction_key, current_time.timestamp())  # type: ignore
+    await redis_client.rpush(interaction_key, datetime.now().timestamp())  # type: ignore
     await redis_client.ltrim(interaction_key, -INTERACTION_LIMIT, -1)  # type: ignore
 
     # Get context messages
@@ -59,7 +81,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
     # Add user message
     messages.append({
         "role": "user",
-        "content": update.message.text or ""
+        "content": update.message.text
     })
 
     # save message to Redis
@@ -75,178 +97,121 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         logger.warning(f"Missing OpenAI API key for user {user_id}")
         return
 
-    try:
-        # Call OpenAI API
-        client = openai.AsyncOpenAI(
-            api_key=openai_api_key.decode('utf-8'),
-        )
-        if openai_api_endpoint:
-            client.base_url = openai_api_endpoint.decode('utf-8')
+    client = openai.AsyncOpenAI(
+        api_key=openai_api_key.decode('utf-8'),
+    )
+    if openai_api_endpoint:
+        client.base_url = openai_api_endpoint.decode('utf-8')
 
-        model = openai_model.decode('utf-8') if openai_model else "gpt-4"
-        logger.info(f"Using model {model} for user {user_id}")
+    model = openai_model.decode('utf-8') if openai_model else "gpt-4"
+    logger.info(f"Using model {model} for user {user_id}")
 
-        tools: List[ChatCompletionToolParam] = [{
-            "type": "function",
-            "function": {
-                "name": "get_current_time",
-                "description": "Get the current time",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
+    async def add_tool_calls_results(tool_calls: dict[int, ChoiceDeltaToolCall]):
+        nonlocal messages
 
-                    },
-                    "required": [],
-                    "additionalProperties": False
-                },
-            }
-        }]
-        tools = []  # temporary fix since deepseek-chat is having issues with tools with the current model
+        for tool_call in tool_calls.values():
+            if tool_call.function and tool_call.function.name == "get_current_time":
+                logger.info(f"Calling tool get_current_time")
 
-        reply = await update.message.reply_text("...", reply_to_message_id=message_id)
+                time = datetime.now()
+                time_str = time.strftime("%Y-%m-%d %H:%M:%S")
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": f"The current time is {time_str}. (UTC)"
+                })
 
-        for _ in range(10):
-            logger.info(f"messages: {json.dumps(messages)}")
+        for reply in replies:
+            await redis_client.hset(user_key, str(reply.message_id), json.dumps(messages))  # type: ignore
 
-            stream = await client.chat.completions.create(
-                model=model,
-                messages=messages,
-                # tools=tools,
-                stream=True
-            )
+    async def update_reply_msg_to_user():
+        nonlocal reply_msg, reply_msg_start, reply_msg_last_sent_end_pos, current_reply_obj, replies
 
-            replies = []
-            msg = ""
-            buffer = ""
-            start = 0
-            tool_calls: dict[int, ChoiceDeltaToolCall] = {}
+        if len(reply_msg) == reply_msg_last_sent_end_pos:
+            return
 
-            async def try_send_html_message(message: str, start: int, end: int, reply_obj) -> tuple[bool, int]:
-                logger.info(f"try_send_html_message: {message[start:end]}")
-
-                """Try to send message with HTML formatting, trimming back to newlines if needed.
-                Returns (success, new_end_position)"""
-                test_end = end
-                while test_end > start:
-                    try:
-                        await reply_obj.edit_text(
-                            message[start:test_end],
-                            parse_mode="HTML"
-                        )
-                        return True, test_end
-                    except Exception as e:
-                        await reply_obj.edit_text(message[start:test_end])
-                        
-                        # Try previous newline
-                        test_end -= 1
-                        while test_end > start and message[test_end] not in ["\n", " "]:
-                            test_end -= 1
-
-                try:
-                    await reply_obj.edit_text(message[start:end])
-                    logger.warning(f"Failed to send message with HTML formatting, sending plain text instead")
-                    return False, end
-                except Exception as e:
-                    logger.error(f"Error editing message: {e}", exc_info=True)
-                    return False, end
-
-            async def try_send_message():
-                nonlocal start, msg, replies, reply
-
-                if len(msg) - start <= 2000:
-                    success, _ = await try_send_html_message(msg, start, len(msg), reply)
+        try:
+            while True:
+                if len(reply_msg[reply_msg_start:]) > TELEGRAM_MESSAGE_MAX_LENGTH:
+                    await current_reply_obj.edit_text(reply_msg[reply_msg_start:reply_msg_start + TELEGRAM_MESSAGE_MAX_LENGTH])
+                    reply_msg_last_sent_end_pos = reply_msg_start + TELEGRAM_MESSAGE_MAX_LENGTH
+                    replies.append(current_reply_obj)
+                    current_reply_obj = await update.message.reply_text("...", reply_to_message_id=message_id)
+                    reply_msg_start += TELEGRAM_MESSAGE_MAX_LENGTH
                 else:
-                    # Try to break around 2000 chars
-                    new_start = min(start + 2000, len(msg))
-                    while new_start > start and msg[new_start] not in ["\n", " "]:
-                        new_start -= 1
-                    new_start += 1
+                    await current_reply_obj.edit_text(reply_msg[reply_msg_start:])
+                    reply_msg_last_sent_end_pos = len(reply_msg)
+                    break
+        except Exception as e:
+            logger.error(f"Error updating reply message to user: {e}")
 
-                    success, new_start = await try_send_html_message(msg, start, new_start, reply)
-                    start = new_start
+    async def get_assistant_reply():
+        nonlocal reply_msg, messages, replies
 
-                    replies.append(reply)
-                    reply = await update.message.reply_text("...", reply_to_message_id=message_id)
+        stream = await client.chat.completions.create(
+            model=model,
+            messages=messages,
+            tools=TOOLS,
+            stream=True
+        )
 
-                    # Send next message
-                    success, _ = await try_send_html_message(msg, start, len(msg), reply)
-                    if success:
-                        replies.append(reply)
+        tool_calls: dict[int, ChoiceDeltaToolCall] = {}
 
-            async for chunk in stream:
-                for tool_call in chunk.choices[0].delta.tool_calls or []:
-                    if (index := tool_call.index) not in tool_calls:
-                        tool_calls[index] = tool_call
+        async for chunk in stream:
+            for tool_call in chunk.choices[0].delta.tool_calls or []:
+                if (index := tool_call.index) not in tool_calls:
+                    tool_calls[index] = tool_call
 
-                    tool_calls[index].function.arguments += tool_call.function.arguments  # type: ignore
+                tool_calls[index].function.arguments += tool_call.function.arguments
 
-                new_msg = chunk.choices[0].delta.content or ""
-                buffer += new_msg
+            reply_msg += chunk.choices[0].delta.content or ""
 
-                if len(buffer.rstrip()) > 200:
-                    msg += buffer
-                    buffer = ""
-                    await try_send_message()
+            if len(reply_msg[reply_msg_start:]) > 200:
+                await update_reply_msg_to_user()
 
-            msg += buffer
-            msg = msg.strip()
+        if len(reply_msg) > 0:
+            await update_reply_msg_to_user()
+            replies.append(current_reply_obj)
 
+        if len(tool_calls) > 0:
             tool_calls_json = [
                 {
                     "id": tool_call.id,
                     "type": "function",
                     "function": {
-                        "name": tool_call.function.name,  # type: ignore
-                        "arguments": tool_call.function.arguments  # type: ignore
+                        "name": tool_call.function.name,
+                        "arguments": tool_call.function.arguments
                     }
                 }
                 for tool_call in tool_calls.values()
             ]
 
-            logger.info(f"Tool calls: {tool_calls_json}")
-
-            if len(tool_calls_json) > 0:
-                messages.append({
-                    "role": "assistant",
-                    "content": msg,
-                    "tool_calls": tool_calls_json
-                })
-            else:
-                messages.append({
-                    "role": "assistant",
-                    "content": msg
-                })
-
-            for tool_call in tool_calls.values():
-                if tool_call.function.name == "get_current_time":  # type: ignore
-                    time = datetime.now()
-                    time_str = time.strftime("%Y-%m-%d %H:%M:%S")
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "content": f"The current time is {time_str}. (UTC)"
-                    })
-
-            logger.info(f"messages: {json.dumps(messages)}")
-
-            for reply in replies:
-                await redis_client.hset(user_key, str(reply.message_id), json.dumps(messages))  # type: ignore
-
-            if len(msg) > 0:
-                await try_send_message()
-
-            if len(msg) > 0 and len(tool_calls) == 0:
-                break
+            messages.append({
+                "role": "assistant",
+                "content": reply_msg,
+                "tool_calls": tool_calls_json
+            })
+            await add_tool_calls_results(tool_calls)
         else:
-            logger.error(f"Something went wrong, retrying...")
+            messages.append({
+                "role": "assistant",
+                "content": reply_msg
+            })
 
-        logger.info(f"Successfully processed message for user {user_id}")
-    except Exception as e:
-        logger.error(f"Error calling OpenAI API: {e}", exc_info=True)
-        error_msg = f"""
-Error calling OpenAI API:
-> OPENAI_API_KEY = {'*' * 8}{openai_api_key[-4:].decode('utf-8') if openai_api_key else 'None'}
-> OPENAI_API_ENDPOINT = {openai_api_endpoint.decode('utf-8') if openai_api_endpoint else 'None'}
-> OPENAI_MODEL = {openai_model.decode('utf-8') if openai_model else 'None'}
-"""
-        await update.message.reply_text(error_msg)
+    current_reply_obj = await update.message.reply_text("...", reply_to_message_id=message_id)
+
+    for _ in range(MAX_RETRIES):
+        replies: List[Message] = []
+        reply_msg = ""
+        reply_msg_start = 0
+        reply_msg_last_sent_end_pos = 0
+
+        await get_assistant_reply()
+        for reply in replies:
+            # store message to Redis
+            await redis_client.hset(user_key, str(reply.message_id), json.dumps(messages))  # type: ignore
+
+        if len(reply_msg.strip()) > 0:
+            break
+
+    logger.info(f"Successfully processed message for user {user_id}")

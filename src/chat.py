@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from core import logger, redis_client
+from utils import clean_html
 import openai
 from typing import List
 import json
@@ -12,7 +13,7 @@ from openai.types.chat.chat_completion_chunk import ChoiceDeltaToolCall
 INTERACTION_LIMIT = 10
 TIME_WINDOW = timedelta(minutes=1)
 TELEGRAM_MESSAGE_MAX_LENGTH = 2000
-MAX_RETRIES = 3
+MAX_RETRIES = 10
 TOOLS: List[ChatCompletionToolParam] = [{
     "type": "function",
     "function": {
@@ -127,19 +128,19 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
     async def update_reply_msg_to_user():
         nonlocal reply_msg, reply_msg_start, reply_msg_last_sent_end_pos, current_reply_obj, replies
 
-        if len(reply_msg) == reply_msg_last_sent_end_pos:
+        if len(reply_msg) == reply_msg_last_sent_end_pos or reply_msg[reply_msg_start:].strip(" \n\t") == "":
             return
 
         try:
             while True:
                 if len(reply_msg[reply_msg_start:]) > TELEGRAM_MESSAGE_MAX_LENGTH:
-                    await current_reply_obj.edit_text(reply_msg[reply_msg_start:reply_msg_start + TELEGRAM_MESSAGE_MAX_LENGTH])
+                    await current_reply_obj.edit_text(clean_html(reply_msg[reply_msg_start:reply_msg_start + TELEGRAM_MESSAGE_MAX_LENGTH]), parse_mode="HTML")
                     reply_msg_last_sent_end_pos = reply_msg_start + TELEGRAM_MESSAGE_MAX_LENGTH
                     replies.append(current_reply_obj)
                     current_reply_obj = await update.message.reply_text("...", reply_to_message_id=message_id)
                     reply_msg_start += TELEGRAM_MESSAGE_MAX_LENGTH
                 else:
-                    await current_reply_obj.edit_text(reply_msg[reply_msg_start:])
+                    await current_reply_obj.edit_text(clean_html(reply_msg[reply_msg_start:]), parse_mode="HTML")
                     reply_msg_last_sent_end_pos = len(reply_msg)
                     break
         except Exception as e:
@@ -169,7 +170,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             if len(reply_msg[reply_msg_last_sent_end_pos:]) > 200:
                 await update_reply_msg_to_user()
 
-        if len(reply_msg) > 0:
+        if len(reply_msg.strip(" \n\t")) > 0:
             await update_reply_msg_to_user()
             replies.append(current_reply_obj)
 
@@ -211,7 +212,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             # store message to Redis
             await redis_client.hset(user_key, str(reply.message_id), json.dumps(messages))  # type: ignore
 
-        if len(reply_msg.strip()) > 0:
+        if len(reply_msg.strip(" \n\t")) > 0:
             break
 
     logger.info(f"Successfully processed message for user {user_id}")

@@ -6,7 +6,7 @@ from chat import handle_message
 from core import logger
 from tweet import check_for_new_tweets
 
-SCRAPE_INTERVAL = os.environ.get('SCRAPE_INTERVAL', 60)
+SCRAPE_INTERVAL = int(os.environ.get('SCRAPE_INTERVAL', 300))
 
 
 async def handle_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

@@ -1,6 +1,6 @@
 from datetime import datetime, timedelta
 from core import logger, redis_client
-from utils import clean_html
+from utils import clean_html, get_web_content
 import openai
 from typing import List
 import json
@@ -14,9 +14,10 @@ INTERACTION_LIMIT = 10
 TIME_WINDOW = timedelta(minutes=1)
 TELEGRAM_MESSAGE_MAX_LENGTH = 2000
 MAX_RETRIES = 10
-TOOLS: List[ChatCompletionToolParam] = [{
-    "type": "function",
-    "function": {
+TOOLS: List[ChatCompletionToolParam] = [
+    {
+        "type": "function",
+        "function": {
             "name": "get_current_time",
             "description": "Get the current time",
             "parameters": {
@@ -27,8 +28,23 @@ TOOLS: List[ChatCompletionToolParam] = [{
                 "required": [],
                 "additionalProperties": False
             },
+        }
+    }, {
+        "type": "function",
+        "function": {
+            "name": "get_web_content",
+            "description": "Get the content of a web page",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {"type": "string", "description": "The URL of the web page to get the content from"}
+                },
+                "required": ["url"],
+                "additionalProperties": False
+            }
+        }
     }
-}]
+]
 
 
 async def handle_message(update: Update, context: CallbackContext) -> None:
@@ -111,6 +127,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         nonlocal messages
 
         for tool_call in tool_calls.values():
+            arguments = json.loads(tool_call.function.arguments)
             if tool_call.function and tool_call.function.name == "get_current_time":
                 logger.info(f"Calling tool get_current_time")
 
@@ -120,6 +137,15 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
                     "role": "tool",
                     "tool_call_id": tool_call.id,
                     "content": f"The current time is {time_str}. (UTC)"
+                })
+            elif tool_call.function and tool_call.function.name == "get_web_content":
+                logger.info(f"Calling tool get_web_content")
+                url = arguments["url"]
+                content = await get_web_content(url)
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "content": content
                 })
 
         for reply in replies:

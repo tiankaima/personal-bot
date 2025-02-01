@@ -32,6 +32,9 @@ TWITTER_COOKIE = os.getenv("TWITTER_COOKIE")
 if not TWITTER_COOKIE:
     raise ValueError("TWITTER_COOKIE environment variable not set")
 
+SEND_ONLY_WITH_MEDIA = os.getenv("SEND_ONLY_WITH_MEDIA", "false").lower() == "true"
+IGNORE_RETWEETS = os.getenv("IGNORE_RETWEETS", "false").lower() == "true"
+
 RAW_HEADERS = f"""
 Host: syndication.twitter.com
 User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:132.0) Gecko/20100101 Firefox/132.0
@@ -87,7 +90,7 @@ async def unsubscribe_twitter_user(username: str, chat_id: int):
         await redis_client.srem("twitter_ids", username)
 
 
-async def send_tweet(url: str, context: CallbackContext, chat_id: int, reply_to_message_id: int | None = None) -> None:
+async def send_tweet(url: str, context: CallbackContext, chat_id: int, reply_to_message_id: int | None = None, can_ignore: bool = False) -> None:
     async with httpx.AsyncClient() as client:
         url = url.replace("x.com", "twitter.com").replace('twitter.com', 'api.fxtwitter.com')
 
@@ -96,6 +99,10 @@ async def send_tweet(url: str, context: CallbackContext, chat_id: int, reply_to_
 
     create_timestamp = datetime.fromtimestamp(info['tweet']['created_timestamp'])
     create_timestamp_str = create_timestamp.strftime("%Y/%m/%d %H:%M:%S")
+
+    if can_ignore and IGNORE_RETWEETS and info['tweet']['text'].startswith("RT"):
+        logger.info(f"Ignoring retweet {url}")
+        return
 
     def info_to_caption(info: dict) -> str:
         if len(info['text']):
@@ -147,6 +154,10 @@ async def send_tweet(url: str, context: CallbackContext, chat_id: int, reply_to_
             await context.bot.send_media_group(chat_id=chat_id, media=medias, reply_to_message_id=reply_to_message_id, caption=caption, parse_mode="HTML", write_timeout=20)
 
     else:
+        if can_ignore and SEND_ONLY_WITH_MEDIA:
+            logger.info(f"Ignoring tweet {url} because it has no media and SEND_ONLY_WITH_MEDIA is true")
+            return
+
         await context.bot.send_message(chat_id=chat_id, text=caption, parse_mode="HTML", reply_to_message_id=reply_to_message_id, link_preview_options=LinkPreviewOptions(is_disabled=True))
 
 
@@ -194,7 +205,7 @@ async def check_for_new_tweets(context: CallbackContext):
         for chat_id in await redis_client.smembers(f"twitter_send_target:{twitter_id}"):
             chat_id = int(chat_id)
             try:
-                await send_tweet(tweet_url, context, chat_id)
+                await send_tweet(tweet_url, context, chat_id, can_ignore=True)
             except Exception as e:
                 logger.error(f"Error sending tweet {tweet_url} to chat {chat_id}: {e}")
 

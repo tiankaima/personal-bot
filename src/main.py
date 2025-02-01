@@ -6,6 +6,8 @@ from chat import handle_message
 from core import logger
 from tweet import check_for_new_tweets
 
+SCRAPE_INTERVAL = os.environ.get('SCRAPE_INTERVAL', 60)
+
 
 async def handle_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """
@@ -58,7 +60,7 @@ def main() -> None:
     app.add_handler(CommandHandler("unsubscribe_twitter_user", unsubscribe_twitter_user_command))
     app.add_handler(MessageHandler(filters.UpdateType.CHANNEL_POSTS & filters.COMMAND, handle_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
-    app.job_queue.run_repeating(check_for_new_tweets, interval=10)
+    app.job_queue.run_repeating(check_for_new_tweets, interval=SCRAPE_INTERVAL)
 
     logger.info("Bot is ready to accept connections")
     app.run_polling()

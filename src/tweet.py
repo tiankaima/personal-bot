@@ -15,6 +15,19 @@ To remember which tweets are already sent, we store:
 tweet_id_sent:tweet_id -> 1
 
 and finally we maintain a combined list of all the twitter_ids that we are watching. (This list would be only ipdates when `twitter_send_target` is created/a list turn empty)
+
+---
+
+update (2025-02-02)
+
+we divide the sending process into two parts:
+
+- fetch tweet url from twitter
+- send tweet to telegram
+
+an additional set is used to cache the fetched tweet urls:
+
+tweet_url_to_be_sent: [tweet_url1, tweet_url2, ...]
 """
 
 from core import logger, redis_client
@@ -201,7 +214,19 @@ async def check_for_new_tweets(context: CallbackContext):
         if await redis_client.get(f"tweet_id_sent:{tweet_url}"):
             continue
 
-        # send the tweet to all the users that are subscribed to this twitter_id
+        await redis_client.sadd("tweet_url_to_be_sent", tweet_url)
+
+
+async def send_tweets(context: CallbackContext):
+    tweet_urls = await redis_client.smembers("tweet_url_to_be_sent")
+    if not tweet_urls:
+        logger.info("No tweet_url_to_be_sent found, skipping")
+        return
+
+    for tweet_url_raw in tweet_urls:
+        tweet_url = tweet_url_raw.decode("utf-8")
+        twitter_id = re.search(r"https://x\.com/(\w+)/status/(\d+)", tweet_url).group(1)
+
         for chat_id in await redis_client.smembers(f"twitter_send_target:{twitter_id}"):
             chat_id = int(chat_id)
             try:
@@ -209,7 +234,8 @@ async def check_for_new_tweets(context: CallbackContext):
             except Exception as e:
                 logger.error(f"Error sending tweet {tweet_url} to chat {chat_id}: {e}")
 
-        await asyncio.sleep(random.randint(1, 3))
-
         # mark the tweet as sent
         await redis_client.set(f"tweet_id_sent:{tweet_url}", 1)
+        await redis_client.srem("tweet_url_to_be_sent", tweet_url)
+
+        await asyncio.sleep(random.randint(1, 3))

@@ -4,9 +4,10 @@ from telegram.ext import CommandHandler, MessageHandler, filters, ApplicationBui
 from commands import set_openai_key, set_openai_endpoint, set_openai_model, start, help_command, subscribe_twitter_user_command, unsubscribe_twitter_user_command
 from chat import handle_message
 from core import logger
-from tweet import check_for_new_tweets
+from tweet import check_for_new_tweets, send_tweets
 
 SCRAPE_INTERVAL = int(os.environ.get('SCRAPE_INTERVAL', 300))
+SENT_INTERVAL = int(os.environ.get('SENT_INTERVAL', 2))
 
 
 async def handle_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -61,6 +62,7 @@ def main() -> None:
     app.add_handler(MessageHandler(filters.UpdateType.CHANNEL_POSTS & filters.COMMAND, handle_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.job_queue.run_repeating(check_for_new_tweets, interval=SCRAPE_INTERVAL)
+    app.job_queue.run_repeating(send_tweets, interval=SENT_INTERVAL)
 
     logger.info("Bot is ready to accept connections")
     app.run_polling()

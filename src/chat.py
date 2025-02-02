@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 from core import logger, redis_client
 from utils import clean_html, get_web_content
 from tweet import send_tweet
+from pixiv import send_pixiv_novel
 import openai
 from typing import List
 import json
@@ -49,6 +50,7 @@ TOOLS: List[ChatCompletionToolParam] = [
 ]
 
 TWITTER_URL_REGEX = re.compile(r"https://(x|twitter)\.com/[^/]+/status/\d+")
+PIXIV_NOVEL_URL_REGEX = re.compile(r"https://www.pixiv.net/novel/show.php\?id=(\d+)")
 
 
 async def handle_message(update: Update, context: CallbackContext) -> None:
@@ -61,6 +63,11 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
 
     if TWITTER_URL_REGEX.match(update.message.text):
         await send_tweet(update.message.text, context, update.message.from_user.id, update.message.message_id)
+        return
+
+    if PIXIV_NOVEL_URL_REGEX.match(update.message.text):
+        novel_id = PIXIV_NOVEL_URL_REGEX.search(update.message.text).group(1)
+        await send_pixiv_novel(novel_id, context, update.message.from_user.id, update.message.message_id)
         return
 
     user_id = update.message.from_user.id

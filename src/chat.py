@@ -203,8 +203,8 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             for tool_call in chunk.choices[0].delta.tool_calls or []:
                 if (index := tool_call.index) not in tool_calls:
                     tool_calls[index] = tool_call
-
-                tool_calls[index].function.arguments += tool_call.function.arguments
+                else:
+                    tool_calls[index].function.arguments += tool_call.function.arguments or ""
 
             reply_msg += chunk.choices[0].delta.content or ""
 

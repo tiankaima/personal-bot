@@ -5,15 +5,22 @@ services:
             dockerfile: Dockerfile
         depends_on:
             - redis
+            - meta
         env_file:
             - .env
         develop:
             watch:
                 - action: rebuild
                   path: ./src
-        command: ["sh", "-c", "pip install debugpy -t /tmp && python /tmp/debugpy --wait-for-client --listen 0.0.0.0:5678 /app/main.py"]
+        command: [ "sh", "-c", "pip install debugpy -t /tmp && python /tmp/debugpy --wait-for-client --listen 0.0.0.0:5678 /app/main.py" ]
         ports:
             - 5678:5678
+
+    meta:
+        container_name: meta
+        image: docker.io/metacubex/mihomo:Alpha
+        volumes:
+            - ./config.yaml:/root/.config/mihomo/config.yaml
 
     redis:
         image: "redis:latest"

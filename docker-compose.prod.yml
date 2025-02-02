@@ -4,8 +4,15 @@ services:
         image: ghcr.io/tiankaima/personal-bot:latest
         depends_on:
             - redis
+            - meta
         env_file:
             - .env
+
+    meta:
+        container_name: meta
+        image: docker.io/metacubex/mihomo:Alpha
+        volumes:
+            - ./config.yaml:/root/.config/mihomo/config.yaml
 
     redis:
         container_name: redis
@@ -26,3 +33,4 @@ services:
         depends_on:
             - app
             - redis
+            - meta

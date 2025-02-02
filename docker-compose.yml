@@ -6,12 +6,19 @@ services:
             dockerfile: Dockerfile
         depends_on:
             - redis
+            - meta
         env_file:
             - .env
         develop:
             watch:
                 - action: rebuild
                   path: ./src
+    
+    meta:
+        container_name: meta
+        image: docker.io/metacubex/mihomo:Alpha
+        volumes:
+            - ./config.yaml:/root/.config/mihomo/config.yaml
 
     redis:
         container_name: redis

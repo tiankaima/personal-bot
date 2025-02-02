@@ -101,7 +101,7 @@ WEB_TEST_CASES = [
     """
 ]
 
-TAGS_TO_KEEP = ["body", "h1", "h2", "h3", "h4", "h5", "h6", "p", "a", "ul", "ol", "li", "blockquote", "code", "pre", "table", "thead", "tbody", "tfoot", "tr", "td", "th"]
+TAGS_TO_KEEP = ["body", "h1", "h2", "h3", "h4", "h5", "h6", "p", "a", "ul", "ol", "li", "blockquote", "code", "pre", "table", "thead", "tbody", "tfoot", "tr", "td", "th", "article"]
 ATTRIBUTES_TO_KEEP = ["alt"]
 
 
@@ -142,7 +142,8 @@ def clean_web_html(html: str) -> str:
 async def get_web_content(url: str) -> str:
     async with httpx.AsyncClient() as client:
         response = await client.get(url)
-        return clean_web_html(response.text)
+        return response.text
+        #return clean_web_html(response.text)
 
 if __name__ == "__main__":
     for test_case in TEST_CASES:

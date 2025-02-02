@@ -49,8 +49,8 @@ TOOLS: List[ChatCompletionToolParam] = [
     }
 ]
 
-TWITTER_URL_REGEX = re.compile(r"https://(x|twitter)\.com/[^/]+/status/\d+")
-PIXIV_NOVEL_URL_REGEX = re.compile(r"https://www.pixiv.net/novel/show.php\?id=(\d+)")
+TWITTER_URL_REGEX = re.compile(r"https://(x|twitter)\.com/[^/]+/status/\d+.*")
+PIXIV_NOVEL_URL_REGEX = re.compile(r"https://www.pixiv.net/novel/show.php\?id=(\d+).*")
 
 
 async def handle_message(update: Update, context: CallbackContext) -> None:

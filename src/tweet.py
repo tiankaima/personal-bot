@@ -114,7 +114,7 @@ async def send_tweet(url: str, context: CallbackContext, chat_id: int, reply_to_
     create_timestamp_str = create_timestamp.strftime("%Y/%m/%d %H:%M:%S")
 
     if can_ignore and IGNORE_RETWEETS and info['tweet']['text'].startswith("RT"):
-        logger.info(f"Ignoring retweet {url}")
+        logger.info(f"Ignoring tweet {url} because it's a retweet")
         return
 
     def info_to_caption(info: dict) -> str:
@@ -186,11 +186,7 @@ async def fetch_tweets(twitter_id: str) -> list[str]:
             timeout=10,
         )
         tweet_ids = re.findall(r"tweet-(\d{19})", response.text)
-
         tweet_urls = [f"https://x.com/{twitter_id}/status/{tweet_id}" for tweet_id in tweet_ids]
-
-        logger.info(tweet_urls)
-
         return tweet_urls
 
 
@@ -208,13 +204,17 @@ async def check_for_new_tweets(context: CallbackContext):
 
     # fetch the tweets
     tweet_urls = await fetch_tweets(twitter_id)
+    new_url_count = 0
 
     for tweet_url in tweet_urls:
         # check if the tweet is already sent
         if await redis_client.get(f"tweet_id_sent:{tweet_url}"):
             continue
 
+        new_url_count += 1
         await redis_client.sadd("tweet_url_to_be_sent", tweet_url)
+
+    logger.info(f"Found {new_url_count} new tweets")
 
 
 async def send_tweets(context: CallbackContext):
@@ -238,4 +238,4 @@ async def send_tweets(context: CallbackContext):
         await redis_client.set(f"tweet_id_sent:{tweet_url}", 1)
         await redis_client.srem("tweet_url_to_be_sent", tweet_url)
 
-        await asyncio.sleep(random.randint(1, 3))
+        await asyncio.sleep(random.randint(2, 4))

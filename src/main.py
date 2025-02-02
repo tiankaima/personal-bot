@@ -7,7 +7,7 @@ from core import logger
 from tweet import check_for_new_tweets, send_tweets
 
 SCRAPE_INTERVAL = int(os.environ.get('SCRAPE_INTERVAL', 300))
-SENT_INTERVAL = int(os.environ.get('SENT_INTERVAL', 2))
+SENT_INTERVAL = int(os.environ.get('SENT_INTERVAL', 10))
 
 
 async def handle_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:

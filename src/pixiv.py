@@ -1,5 +1,8 @@
+from utils import split_content_by_delimiter
+from llm_translate import translate_text_by_page
+
+from core import logger, redis_client
 import httpx
-import asyncio
 import os
 import re
 import json
@@ -54,50 +57,66 @@ async def get_novel(novel_id: str) -> dict:
         return json.loads(json_str[0])['novel'][novel_id]
 
 
-async def send_to_telegraph(novel_id: str) -> list[str]:
-    novel = await get_novel(novel_id)
-
+async def send_to_telegraph(title: str, content: str, author_name: str, author_url: str) -> list[str]:
     _ = await telegraph.create_account(
-        short_name=novel['userName'],
-        author_name=novel['userName'],
-        author_url=f"https://www.pixiv.net/users/{novel['userId']}",
+        short_name=author_name,
+        author_name=author_name,
+        author_url=author_url,
     )
 
-    html_content_whole = novel['content'].replace("\n", "<br>")
-
+    html_content_whole = content.replace("\n", "<br>")
     pages = []
-    start = 0
-    count = 1
+    chunks = split_content_by_delimiter(html_content_whole, "<br>")
 
-    while start < len(html_content_whole):
-        if start + 20000 > len(html_content_whole):
-            end = len(html_content_whole)
-        else:
-            end = html_content_whole.rfind("<br>", start, start + 20000)
-            if end == -1:
-                end = start + 20000
-
-        html_content = f'<p>{html_content_whole[start:end]}</p>'
-
+    for i, chunk in enumerate(chunks, 1):
         page = await telegraph.create_page(
-            title=f"[{novel_id}.{count}] {novel['title']}",
-            html_content=html_content,
-            author_name=novel['userName'],
-            author_url=f"https://www.pixiv.net/users/{novel['userId']}",
+            title=f"{title}.{i}",
+            html_content=chunk,
+            author_name=author_name,
+            author_url=author_url,
         )
-
         pages.append(page)
-
-        start = end
-        count += 1
 
     return [page['url'] for page in pages]
 
+
 async def send_pixiv_novel(novel_id: str, context: ContextTypes.DEFAULT_TYPE, user_id: int, message_id: int):
-    page_urls = await send_to_telegraph(novel_id)
+    novel = await get_novel(novel_id)
+
+    title = f"[{novel_id}] {novel['title']}"
+    author_name = novel['userName']
+    author_url = f"https://www.pixiv.net/users/{novel['userId']}"
+
+    page_urls = await send_to_telegraph(
+        title=title,
+        content=novel['content'],
+        author_name=author_name,
+        author_url=author_url
+    )
+
     for page_url in page_urls:
         await context.bot.send_message(chat_id=user_id, text=page_url, reply_to_message_id=message_id)
 
-if __name__ == "__main__":
-    novel_id = "11630290"
-    asyncio.run(send_to_telegraph(novel_id))
+    openai_api_key = (await redis_client.get(f"user:{user_id}:openai_api_key")) or b''
+    openai_api_endpoint = (await redis_client.get(f"user:{user_id}:openai_api_endpoint")) or b''
+    openai_model = (await redis_client.get(f"user:{user_id}:openai_model")) or b''
+
+    if not openai_api_key:
+        return
+
+    translated_content = await translate_text_by_page(
+        novel["content"],
+        openai_api_key.decode('utf-8'),
+        openai_api_endpoint.decode('utf-8'),
+        openai_model.decode('utf-8')
+    )
+
+    page_urls = await send_to_telegraph(
+        title=f"translated_{title}",
+        content=translated_content,
+        author_name=author_name,
+        author_url=author_url
+    )
+
+    for page_url in page_urls:
+        await context.bot.send_message(chat_id=user_id, text=page_url, reply_to_message_id=message_id)

@@ -7,7 +7,25 @@ Aims to clean out LLM output, cleans out non-existing HTML tags, and closes open
 from html.parser import HTMLParser
 import httpx
 import asyncio
-import json
+
+
+def split_content_by_delimiter(content: str, delimiter: str, chunk_size: int = 20000) -> list[str]:
+    chunks = []
+    start = 0
+
+    while start < len(content):
+        if start + chunk_size > len(content):
+            end = len(content)
+        else:
+            end = content.rfind(delimiter, start, start + chunk_size)
+            if end == -1:
+                end = start + chunk_size
+
+        chunks.append(content[start:end])
+        start = end
+
+    return chunks
+
 
 ACCEPTABLE_HTML_TAGS = ["b", "strong", "i", "em", "code", "s", "strike", "del", "pre"]
 TEST_CASES = [
@@ -143,7 +161,7 @@ async def get_web_content(url: str) -> str:
     async with httpx.AsyncClient() as client:
         response = await client.get(url)
         return response.text
-        #return clean_web_html(response.text)
+        # return clean_web_html(response.text)
 
 if __name__ == "__main__":
     for test_case in TEST_CASES:

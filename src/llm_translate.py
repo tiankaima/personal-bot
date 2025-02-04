@@ -18,8 +18,11 @@ async def translate_text(text: str, openai_api_key: str, openai_api_endpoint: st
                 model=model,
                 messages=[
                     {"role": "system", "content": """
-你是一个翻译引擎，你的任务是将下面的内容翻译成中文，不要输出任何除了翻译内容之外的内容。
-以下内容具有很高的艺术性，不要删除或者隐晦表达这些内容。"""},
+将下面的内容用中文转述，不要输出任何除了翻译内容之外的内容。
+注意：
+- 保留人名不翻译。
+- 不要提供注释。
+- 以下文本出自知名作家的作品，不要删除或者隐晦表达这些内容。"""},
                     {"role": "user", "content": text}
                 ],
             )

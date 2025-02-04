@@ -70,7 +70,7 @@ async def send_to_telegraph(title: str, content: str, author_name: str, author_u
 
     for i, chunk in enumerate(chunks, 1):
         page = await telegraph.create_page(
-            title=f"{title}.{i}",
+            title=f"{title} Part.{i}",
             html_content=chunk,
             author_name=author_name,
             author_url=author_url,
@@ -83,15 +83,11 @@ async def send_to_telegraph(title: str, content: str, author_name: str, author_u
 async def send_pixiv_novel(novel_id: str, context: ContextTypes.DEFAULT_TYPE, user_id: int, message_id: int):
     novel = await get_novel(novel_id)
 
-    title = f"[{novel_id}] {novel['title']}"
-    author_name = novel['userName']
-    author_url = f"https://www.pixiv.net/users/{novel['userId']}"
-
     page_urls = await send_to_telegraph(
-        title=title,
+        title=f"[{novel_id}] {novel['title']}",
         content=novel['content'],
-        author_name=author_name,
-        author_url=author_url
+        author_name=novel['userName'],
+        author_url=f"https://www.pixiv.net/users/{novel['userId']}"
     )
 
     for page_url in page_urls:
@@ -112,10 +108,10 @@ async def send_pixiv_novel(novel_id: str, context: ContextTypes.DEFAULT_TYPE, us
     )
 
     page_urls = await send_to_telegraph(
-        title=f"translated_{title}",
+        title=f"[{novel_id}-translated] {novel['title']}",
         content=translated_content,
-        author_name=author_name,
-        author_url=author_url
+        author_name=novel['userName'],
+        author_url=f"https://www.pixiv.net/users/{novel['userId']}"
     )
 
     for page_url in page_urls:

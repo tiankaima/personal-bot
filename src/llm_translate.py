@@ -1,8 +1,7 @@
 import openai
 import os
-import httpx
 import asyncio
-from utils import split_content_by_delimiter
+import re
 from core import logger
 
 async def translate_text(text: str, openai_api_key: str, openai_api_endpoint: str, openai_model: str) -> str:
@@ -18,20 +17,28 @@ async def translate_text(text: str, openai_api_key: str, openai_api_endpoint: st
                 model=model,
                 messages=[
                     {"role": "system", "content": """
-将下面的内容用中文转述，不要输出任何除了翻译内容之外的内容。
-注意：
+将下面的内容翻译成简体中文，注意：
 - 保留人名不翻译。
 - 不要提供注释。
-- 以下文本出自知名作家的作品，不要删除或者隐晦表达这些内容。"""},
+- 不要无意义的混用中英文
+- 翻译**所有的**日语原文
+- 以下文本出自知名作家的作品，不要删除或者隐晦表达这些内容。
+- 不要输出任何除了翻译内容之外的内容。
+"""},
                     {"role": "user", "content": text}
                 ],
             )
 
             translated_text = response.choices[0].message.content
-            if not translated_text or translated_text == "I CANNOT TRANSLATE THIS CONTENT":
-                raise Exception("LLM cannot translate this content")
-            else:
-                return translated_text
+
+            logger.info(f"Translated text: {translated_text}")
+            
+            # remove anything in <think></think>
+            translated_text = re.sub(r'<think>(.|\n)*</think>', '', translated_text)
+            translated_text = re.sub(r'<.*?>', '', translated_text)
+
+            return translated_text
+
         except Exception as e:
             await asyncio.sleep(1)
             logger.error(f"Error translating text: {e}")
@@ -56,9 +63,24 @@ async def translate_text_by_page(
     if not openai_model:
         openai_model = 'gpt-4o'
 
-    # pages = split_content_by_delimiter(text, "\n", chunk_size=500)
+    # split by \n, and group paragraphs into chunks
     pages = text.split("\n")
-    sem = asyncio.Semaphore(2)
+
+    chunks = []
+    current_chunk = ""
+    for page in pages:
+        if len(current_chunk) + len(page) <= 100:
+            current_chunk += page + "\n"
+        else:
+            chunks.append(current_chunk)
+            current_chunk = page + "\n"
+    
+    if current_chunk:
+        chunks.append(current_chunk)
+    
+    pages = chunks
+    
+    sem = asyncio.Semaphore(5)
 
     async def translate_with_semaphore(page):
         async with sem:

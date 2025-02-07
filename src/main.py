@@ -1,7 +1,7 @@
 import os
 from telegram import Update
 from telegram.ext import CommandHandler, MessageHandler, filters, ApplicationBuilder, ContextTypes
-from commands import set_openai_key, set_openai_endpoint, set_openai_model, start, help_command, subscribe_twitter_user_command, unsubscribe_twitter_user_command
+from commands import set_openai_key, set_openai_endpoint, set_openai_model, set_openai_enable_tools, start, help_command, subscribe_twitter_user_command, unsubscribe_twitter_user_command
 from chat import handle_message
 from core import logger
 from tweet import check_for_new_tweets, send_tweets
@@ -58,6 +58,7 @@ def main() -> None:
     app.add_handler(CommandHandler("set_openai_key", set_openai_key))
     app.add_handler(CommandHandler("set_openai_endpoint", set_openai_endpoint))
     app.add_handler(CommandHandler("set_openai_model", set_openai_model))
+    app.add_handler(CommandHandler("set_openai_enable_tools", set_openai_enable_tools))
     app.add_handler(CommandHandler("subscribe_twitter_user", subscribe_twitter_user_command))
     app.add_handler(CommandHandler("unsubscribe_twitter_user", unsubscribe_twitter_user_command))
     app.add_handler(MessageHandler(filters.UpdateType.CHANNEL_POSTS & filters.COMMAND, handle_command))

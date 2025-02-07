@@ -62,6 +62,20 @@ async def set_openai_model(update: Update, context: CallbackContext) -> None:
         await update.effective_message.reply_text('Usage: /set_openai_model <your_openai_model>', reply_to_message_id=update.effective_message.message_id)
         logger.warning(f"Invalid OpenAI model format from user {update.effective_message.from_user.id}")
 
+async def set_openai_enable_tools(update: Update, context: CallbackContext) -> None:
+    if not context.args or len(context.args) > 1:
+        await update.effective_message.reply_text('Usage: /set_openai_enable_tools <true/false>')
+        logger.warning(f"Invalid OpenAI enable tools format from user {update.effective_message.from_user.id}")
+        return
+    
+    if openai_enable_tools := context.args[0] if context.args else None:
+        await redis_client.set(f"user:{update.effective_message.from_user.id}:openai_enable_tools", openai_enable_tools)
+        await update.effective_message.reply_text('Your OpenAI enable tools has been set.', reply_to_message_id=update.effective_message.message_id)
+        logger.info(f"OpenAI enable tools set for user {update.effective_message.from_user.id}: {openai_enable_tools}")
+    else:
+        await update.effective_message.reply_text('Usage: /set_openai_enable_tools <true/false>', reply_to_message_id=update.effective_message.message_id)
+        logger.warning(f"Invalid OpenAI enable tools format from user {update.effective_message.from_user.id}")
+
 
 async def subscribe_twitter_user_command(update: Update, context: CallbackContext) -> None:
     if not context.args or len(context.args) != 1:

@@ -123,6 +123,12 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
     openai_api_key = await redis_client.get(f"user:{user_id}:openai_api_key")
     openai_api_endpoint = await redis_client.get(f"user:{user_id}:openai_api_endpoint")
     openai_model = await redis_client.get(f"user:{user_id}:openai_model")
+    openai_enable_tools = await redis_client.get(f"user:{user_id}:openai_enable_tools")
+
+    if openai_enable_tools:
+        openai_enable_tools = openai_enable_tools.decode('utf-8').lower() == "true"
+    else:
+        openai_enable_tools = False
 
     if not openai_api_key:
         await update.message.reply_text('Please set your OpenAI API key using /set_openai_key <your_openai_api_key>.')
@@ -190,12 +196,19 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
     async def get_assistant_reply():
         nonlocal reply_msg, messages, replies
 
-        stream = await client.chat.completions.create(
-            model=model,
-            messages=messages,
-            tools=TOOLS,
-            stream=True
-        )
+        if openai_enable_tools:
+            stream = await client.chat.completions.create(
+                model=model,
+                messages=messages,
+                tools=TOOLS,
+                stream=True
+            )
+        else:
+            stream = await client.chat.completions.create(
+                model=model,
+                messages=messages,
+                stream=True
+            )
 
         tool_calls: dict[int, ChoiceDeltaToolCall] = {}
 

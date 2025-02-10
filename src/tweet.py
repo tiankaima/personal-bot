@@ -149,7 +149,8 @@ async def send_tweet(url: str, context: CallbackContext, chat_id: int, reply_to_
                     medias.append(InputMediaPhoto(media['url']))
                 elif media['type'] == 'video':
                     medias.append(InputMediaVideo(media['variants'][3]['url']))
-
+                elif media['type'] == 'gif':
+                    medias.append(InputMediaVideo(media['variants'][0]['url']))
             await context.bot.send_media_group(chat_id=chat_id, media=medias, reply_to_message_id=reply_to_message_id, caption=caption, parse_mode="HTML", write_timeout=20)
         except Exception as e:
             logger.error(f"Error fetching media for tweet {url}: {e}")
@@ -162,6 +163,9 @@ async def send_tweet(url: str, context: CallbackContext, chat_id: int, reply_to_
                         medias.append(InputMediaPhoto(response.content))
                     elif media['type'] == 'video':
                         response = await client.get(media['variants'][3]['url'])
+                        medias.append(InputMediaVideo(response.content))
+                    elif media['type'] == 'gif':
+                        response = await client.get(media['variants'][0]['url'])
                         medias.append(InputMediaVideo(response.content))
 
             await context.bot.send_media_group(chat_id=chat_id, media=medias, reply_to_message_id=reply_to_message_id, caption=caption, parse_mode="HTML", write_timeout=20)

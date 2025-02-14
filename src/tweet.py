@@ -122,7 +122,7 @@ async def send_tweet(url: str, context: CallbackContext, chat_id: int, reply_to_
             return f"""
 <b>{info['author']['name']}</b> (<a href="{info['author']['url']}">@{info['author']['screen_name']}</a>)
 
-{info['text']}
+{info['text'].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")}
 
 <a href="{info['url']}">{create_timestamp_str}</a>
 """

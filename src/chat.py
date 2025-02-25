@@ -173,22 +173,30 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             await redis_client.hset(user_key, str(reply.message_id), json.dumps(messages))  # type: ignore
 
     async def update_reply_msg_to_user():
-        nonlocal reply_msg, reply_msg_start, reply_msg_last_sent_end_pos, current_reply_obj, replies
+        nonlocal reply_msg_start, reply_msg_last_sent_end_pos, current_reply_obj, replies
 
-        if len(reply_msg) == reply_msg_last_sent_end_pos or reply_msg[reply_msg_start:].strip(" \n\t") == "":
+        msg = f"[{model}] {reply_msg}"
+
+        if len(msg) == reply_msg_last_sent_end_pos or msg[reply_msg_start:].strip(" \n\t") == "":
             return
 
         try:
             while True:
-                if len(reply_msg[reply_msg_start:]) > TELEGRAM_MESSAGE_MAX_LENGTH:
-                    await current_reply_obj.edit_text(clean_html(reply_msg[reply_msg_start:reply_msg_start + TELEGRAM_MESSAGE_MAX_LENGTH]), parse_mode="HTML")
-                    reply_msg_last_sent_end_pos = reply_msg_start + TELEGRAM_MESSAGE_MAX_LENGTH
+                if len(msg[reply_msg_start:]) > TELEGRAM_MESSAGE_MAX_LENGTH:
+                    trim_point = reply_msg_start + TELEGRAM_MESSAGE_MAX_LENGTH
+                    while trim_point > reply_msg_start and msg[trim_point] not in {' ', '\n'}:
+                        trim_point -= 1
+                    if trim_point == reply_msg_start:
+                        trim_point = reply_msg_start + TELEGRAM_MESSAGE_MAX_LENGTH
+
+                    await current_reply_obj.edit_text(clean_html(msg[reply_msg_start:trim_point]), parse_mode="HTML")
+                    reply_msg_last_sent_end_pos = trim_point
                     replies.append(current_reply_obj)
                     current_reply_obj = await update.message.reply_text("...", reply_to_message_id=message_id)
-                    reply_msg_start += TELEGRAM_MESSAGE_MAX_LENGTH
+                    reply_msg_start = trim_point
                 else:
-                    await current_reply_obj.edit_text(clean_html(reply_msg[reply_msg_start:]), parse_mode="HTML")
-                    reply_msg_last_sent_end_pos = len(reply_msg)
+                    await current_reply_obj.edit_text(clean_html(msg[reply_msg_start:]), parse_mode="HTML")
+                    reply_msg_last_sent_end_pos = len(msg)
                     break
         except Exception as e:
             logger.error(f"Error updating reply message to user: {e}")
@@ -221,7 +229,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
 
             reply_msg += chunk.choices[0].delta.content or ""
 
-            if len(reply_msg[reply_msg_last_sent_end_pos:]) > 200:
+            if len(reply_msg[reply_msg_last_sent_end_pos:]) > 200 or reply_msg_last_sent_end_pos == 0:
                 await update_reply_msg_to_user()
 
         if len(reply_msg.strip(" \n\t")) > 0:

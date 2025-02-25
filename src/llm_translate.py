@@ -4,6 +4,7 @@ import asyncio
 import re
 from core import logger
 
+
 async def translate_text(text: str, openai_api_key: str, openai_api_endpoint: str, openai_model: str) -> str:
     client = openai.AsyncOpenAI(
         api_key=openai_api_key,
@@ -32,7 +33,7 @@ async def translate_text(text: str, openai_api_key: str, openai_api_endpoint: st
             translated_text = response.choices[0].message.content
 
             logger.info(f"Translated text: {translated_text}")
-            
+
             # remove anything in <think></think>
             translated_text = re.sub(r'<think>(.|\n)*</think>', '', translated_text)
             translated_text = re.sub(r'<.*?>', '', translated_text)
@@ -43,8 +44,8 @@ async def translate_text(text: str, openai_api_key: str, openai_api_endpoint: st
             await asyncio.sleep(1)
             logger.error(f"Error translating text: {e}")
 
-            text += ' 0' # avoid cache
-    
+            text += ' 0'  # avoid cache
+
     return text
 
 
@@ -74,12 +75,12 @@ async def translate_text_by_page(
         else:
             chunks.append(current_chunk)
             current_chunk = page + "\n"
-    
+
     if current_chunk:
         chunks.append(current_chunk)
-    
+
     pages = chunks
-    
+
     sem = asyncio.Semaphore(5)
 
     async def translate_with_semaphore(page):

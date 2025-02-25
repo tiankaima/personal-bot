@@ -1,7 +1,7 @@
 import os
 from telegram import Update
 from telegram.ext import CommandHandler, MessageHandler, filters, ApplicationBuilder, ContextTypes
-from commands import set_openai_key, set_openai_endpoint, set_openai_model, set_openai_enable_tools, start, help_command, subscribe_twitter_user_command, unsubscribe_twitter_user_command
+from commands import set_openai_key, set_openai_endpoint, set_openai_model, set_openai_enable_tools, start, help_command, subscribe_twitter_user_command, unsubscribe_twitter_user_command, status_command
 from chat import handle_message
 from core import logger
 from tweet import check_for_new_tweets, send_tweets
@@ -24,21 +24,23 @@ async def handle_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     if update.effective_message.text.startswith('/'):
         command = update.effective_message.text[1:].split(' ')[0]
-
         context.args = update.effective_message.text[1:].split(' ')[1:]
-
         logger.info(f"Command received: {command}")
 
         if command == 'start':
             await start(update, context)
         elif command == 'help':
             await help_command(update, context)
+        elif command == 'status':
+            await status_command(update, context)
         elif command == 'set_openai_key':
             await set_openai_key(update, context)
         elif command == 'set_openai_endpoint':
             await set_openai_endpoint(update, context)
         elif command == 'set_openai_model':
             await set_openai_model(update, context)
+        elif command == 'set_openai_enable_tools':
+            await set_openai_enable_tools(update, context)
         elif command == 'subscribe_twitter_user':
             await subscribe_twitter_user_command(update, context)
         elif command == 'unsubscribe_twitter_user':
@@ -55,6 +57,7 @@ def main() -> None:
     app = ApplicationBuilder().token(telegram_token).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("help", help_command))
+    app.add_handler(CommandHandler("status", status_command))
     app.add_handler(CommandHandler("set_openai_key", set_openai_key))
     app.add_handler(CommandHandler("set_openai_endpoint", set_openai_endpoint))
     app.add_handler(CommandHandler("set_openai_model", set_openai_model))

@@ -72,6 +72,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
     The function uses rate limiting to prevent abuse and maintains conversation context
     through Redis storage.
     """
+    logger.debug(f"Handling message: user_id={update.message.from_user.id}, chat_id={update.message.chat.id}, message_id={update.message.message_id}")
 
     user_id = update.message.from_user.id
     chat_id = update.message.chat.id
@@ -81,14 +82,16 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         return
 
     if not update.message.text or not len(update.message.text):
-        logger.info(f"Empty message from user {user_id}")
+        logger.debug(f"Empty message received from user {user_id}")
         return
 
     if TWITTER_URL_REGEX.match(update.message.text):
+        logger.debug(f"Twitter URL detected in message from user {user_id}")
         await send_tweet(update.message.text, context, user_id, chat_id, message_id)
         return
 
     if PIXIV_NOVEL_URL_REGEX.match(update.message.text):
+        logger.debug(f"Pixiv novel URL detected in message from user {user_id}")
         await send_pixiv_novel(update.message.text, context, user_id, chat_id, message_id)
         return
 
@@ -98,7 +101,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
     openai_enable_tools = (await get_redis_value(f"user:{user_id}:openai_enable_tools", "false")).lower() == "true"
 
     if not openai_api_key:
-        logger.info(f"Missing OpenAI API key for user {user_id}")
+        logger.debug(f"OpenAI API key not configured for user {user_id}")
         if update.message.chat.type == "private":
             await update.message.reply_text('Please set your OpenAI API key using /set_openai_key <your_openai_api_key>.')
         else:
@@ -112,7 +115,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         base_url=openai_api_endpoint
     )
 
-    logger.info(f"Replying w/ model={openai_model} endpoint={openai_api_endpoint} to user:{user_id}")
+    logger.debug(f"Processing message with OpenAI: model={openai_model}, endpoint={openai_api_endpoint}, user_id={user_id}")
 
     user_key = f"user:{user_id}:messages"
     messages = []
@@ -121,9 +124,9 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         replied_message = await redis_client.hget(user_key, str(replied_message_id))
         if replied_message:
             messages = json.loads(replied_message.decode('utf-8'))
-            logger.info(f"Added context from replied message {replied_message_id}")
+            logger.debug(f"Retrieved context from replied message {replied_message_id}")
         else:
-            logger.warning(f"No context found for replied message {replied_message_id}")
+            logger.warning(f"Context not found for replied message {replied_message_id}")
     else:
         messages = [{
             "role": "system",
@@ -139,11 +142,12 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
 
     async def add_tool_calls_results(tool_calls: dict[int, ChoiceDeltaToolCall]):
         nonlocal messages
+        logger.debug(f"Processing tool calls: {len(tool_calls)} calls")
 
         for tool_call in tool_calls.values():
             arguments = json.loads(tool_call.function.arguments)
             if tool_call.function and tool_call.function.name == "get_current_time":
-                logger.info(f"Calling tool get_current_time")
+                logger.debug("Executing get_current_time tool")
 
                 time = datetime.now()
                 time_str = time.strftime("%Y-%m-%d %H:%M:%S")
@@ -153,7 +157,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
                     "content": f"The current time is {time_str}. (UTC)"
                 })
             elif tool_call.function and tool_call.function.name == "get_web_content":
-                logger.info(f"Calling tool get_web_content")
+                logger.debug(f"Executing get_web_content tool for URL: {arguments['url']}")
                 url = arguments["url"]
                 content = await get_web_content(url)
                 messages.append({
@@ -164,6 +168,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
 
     async def update_reply_msg_to_user():
         nonlocal reply_msg_start, reply_msg_last_sent_end_pos, current_reply_obj, replies
+        logger.debug(f"Updating reply message: start={reply_msg_start}, last_sent_end={reply_msg_last_sent_end_pos}")
 
         msg = f"[{openai_model}] {reply_msg}"
 
@@ -198,10 +203,12 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
                     reply_msg_last_sent_end_pos = len(msg)
                     break
         except Exception as e:
-            logger.error(f"Error updating reply message to user: {e}")
+            logger.error(f"Failed to update reply message: {str(e)}", exc_info=True)
+            raise
 
     async def get_assistant_reply():
         nonlocal reply_msg, messages, replies
+        logger.debug("Getting assistant reply with OpenAI")
 
         if openai_enable_tools:
             stream = await client.chat.completions.create(
@@ -264,7 +271,8 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
 
     current_reply_obj = await update.message.reply_text("...", reply_to_message_id=message_id)
 
-    for _ in range(MAX_RETRIES):
+    for attempt in range(MAX_RETRIES):
+        logger.debug(f"Processing message attempt {attempt + 1}/{MAX_RETRIES}")
         replies: List[Message] = []
         reply_msg = ""
         reply_msg_start = 0
@@ -278,11 +286,12 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         if no_tool_call and len(reply_msg.strip(" \n\t")) > 0:
             for reply in replies:
                 await redis_client.hset(user_key, str(reply.message_id), json.dumps(messages))
+            logger.info(f"Successfully processed message for user {user_id}")
             break
     else:
+        logger.error(f"Failed to process message after {MAX_RETRIES} attempts for user {user_id}")
         await update.message.reply_text(
             "I'm sorry, but I'm having trouble understanding your message. Please try again.")
-        logger.error(f"Failed to process message for user {user_id}")
         return
 
-    logger.info(f"Successfully processed message for user {user_id}")
+    logger.debug(f"Message handling completed for user {user_id}")

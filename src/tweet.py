@@ -117,7 +117,7 @@ async def send_tweet(
     create_timestamp_str = create_timestamp.strftime("%Y/%m/%d %H:%M:%S")
 
     if can_ignore and IGNORE_RETWEETS and info['tweet']['text'].startswith("RT"):
-        logger.info(f"Ignoring tweet {url} because it's a retweet")
+        logger.debug(f"Ignoring tweet {url} because it's a retweet")
         return
 
     async def info_to_caption(info: dict) -> str:
@@ -127,7 +127,7 @@ async def send_tweet(
             openai_model = await get_redis_value(f'user:{user_id}:openai_model')
 
             if openai_api_key:
-                logger.info(f"Translating tweet {url} to {openai_model}")
+                logger.debug(f"Translating tweet {url} to {openai_model}")
 
                 translated = (await translate_text(
                     info['text'],
@@ -218,7 +218,7 @@ async def send_tweet(
 
     else:
         if can_ignore and SEND_ONLY_WITH_MEDIA:
-            logger.info(f"Ignoring tweet {url} because it has no media and SEND_ONLY_WITH_MEDIA is true")
+            logger.debug(f"Ignoring tweet {url} because it has no media and SEND_ONLY_WITH_MEDIA is true")
             return
 
         await context.bot.send_message(
@@ -231,7 +231,7 @@ async def send_tweet(
 
 
 async def fetch_tweets(twitter_id: str) -> list[str]:
-    logger.info(f"Fetching tweets for {twitter_id}")
+    logger.debug(f"Fetching tweets for {twitter_id}")
 
     # visit https://syndication.twitter.com/srv/timeline-profile/screen-name/{twitter_id}, regex all x.com/@twitter_id/status/...
     # and return the list of tweets
@@ -247,16 +247,16 @@ async def fetch_tweets(twitter_id: str) -> list[str]:
 
 
 async def check_for_new_tweets(context: CallbackContext):
-    logger.info("Checking for new tweets")
+    logger.debug("Checking for new tweets")
 
     # randomly select one twitter_id from twitter_ids
     twitter_id_raw = await redis_client.srandmember("twitter_ids")
     if not twitter_id_raw:
-        logger.info("No twitter_ids found, skipping")
+        logger.debug("No twitter_ids found, skipping")
         return
 
     twitter_id = twitter_id_raw.decode("utf-8")
-    logger.info(f"Selected twitter_id: {twitter_id}")
+    logger.debug(f"Selected twitter_id: {twitter_id}")
 
     # fetch the tweets
     tweet_urls = await fetch_tweets(twitter_id)
@@ -270,13 +270,13 @@ async def check_for_new_tweets(context: CallbackContext):
         new_url_count += 1
         await redis_client.sadd("tweet_url_to_be_sent", tweet_url)
 
-    logger.info(f"Found {new_url_count} new tweets")
+    logger.debug(f"Found {new_url_count} new tweets")
 
 
 async def send_tweets(context: CallbackContext):
     tweet_urls = await redis_client.smembers("tweet_url_to_be_sent")
     if not tweet_urls:
-        logger.info("No tweet_url_to_be_sent found, skipping")
+        logger.debug("No tweet_url_to_be_sent found, skipping")
         return
 
     for tweet_url_raw in tweet_urls:
@@ -287,6 +287,7 @@ async def send_tweets(context: CallbackContext):
             chat_id = int(chat_id)
             try:
                 await send_tweet(tweet_url, context, chat_id, can_ignore=True)
+                logger.info(f"Sent {tweet_url} to chat {chat_id}")
             except Exception as e:
                 logger.error(f"Error sending tweet {tweet_url} to chat {chat_id}: {e}")
 

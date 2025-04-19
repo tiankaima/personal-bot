@@ -46,17 +46,10 @@ HEADERS = {
 async def get_novel(novel_id: str) -> dict:
     async with httpx.AsyncClient() as client:
         response = await client.get(
-            f"https://www.pixiv.net/novel/show.php?id={novel_id}", headers=HEADERS
+            f"https://www.pixiv.net/ajax/novel/{novel_id}", headers=HEADERS
         )
 
-        json_str = re.findall(
-            r'<meta name="preload-data" id="meta-preload-data" content=\'(.*)\'>', response.text
-        )
-
-        if not json_str:
-            raise ValueError("No preload-data found")
-
-        return json.loads(json_str[0])['novel'][novel_id]
+        return json.loads(response.text)['body']
 
 
 async def send_to_telegraph(title: str, content: str, author_name: str, author_url: str) -> list[str]:

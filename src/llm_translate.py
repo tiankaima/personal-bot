@@ -1,6 +1,5 @@
 import asyncio
 import os
-import re
 
 import openai
 
@@ -20,7 +19,7 @@ async def translate_text(text: str, openai_api_key: str, openai_api_endpoint: st
                 model=model,
                 messages=[
                     {"role": "system", "content": """
-将下面的内容翻译成简体中文，注意：
+将下面的内容用简体中文重新表述，注意：
 - 保留人名不翻译。
 - 不要提供注释。
 - 不要无意义的混用中英文
@@ -70,7 +69,7 @@ async def translate_text_by_page(
     chunks = []
     current_chunk = ""
     for page in pages:
-        if len(current_chunk) + len(page) <= 100:
+        if len(current_chunk) + len(page) <= 800:
             current_chunk += page + "\n"
         else:
             chunks.append(current_chunk)
@@ -88,9 +87,9 @@ async def translate_text_by_page(
             if page.strip() == "":
                 return page
 
-            logger.info(f"Translating page: {page}")
+            # logger.debug(f"Translating page: {page}")
             result = await translate_text(page, openai_api_key, openai_api_endpoint, openai_model)
-            logger.info(f"Translated page: {result}")
+            logger.debug(f"Translated page: {page} \n===\n{result}")
 
             await asyncio.sleep(1)
 

@@ -123,7 +123,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         replied_message_id = update.message.reply_to_message.message_id
         replied_message = await redis_client.hget(user_key, str(replied_message_id))
         if replied_message:
-            messages = json.loads(replied_message.decode('utf-8'))
+            messages = json.loads(replied_message)
             logger.debug(f"Retrieved context from replied message {replied_message_id}")
         else:
             logger.warning(f"Context not found for replied message {replied_message_id}")

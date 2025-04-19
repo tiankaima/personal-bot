@@ -32,7 +32,7 @@ async def get_redis_value(key: str, default: Optional[T] = None) -> Optional[str
     value = await redis_client.get(key)
     if value is None:
         return default
-    return value.decode('utf-8')
+    return value
 
 
 def split_content_by_delimiter(content: str, delimiter: str, chunk_size: int = 20000) -> list[str]:

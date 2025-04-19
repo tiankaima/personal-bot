@@ -95,7 +95,6 @@ async def get_all_subscribed_users(chat_id: int) -> list[str]:
     twitter_usernames = await redis_client.smembers(f"telegram_sub_target:{chat_id}")
     if not twitter_usernames:
         return []
-    twitter_usernames = [username.decode("utf-8") for username in twitter_usernames]
     return twitter_usernames
 
 
@@ -279,8 +278,7 @@ async def send_tweets(context: CallbackContext):
         logger.debug("No tweet_url_to_be_sent found, skipping")
         return
 
-    for tweet_url_raw in tweet_urls:
-        tweet_url = tweet_url_raw.decode("utf-8")
+    for tweet_url in tweet_urls:
         twitter_id = re.search(r"https://x\.com/(\w+)/status/(\d+)", tweet_url).group(1)
 
         for chat_id in await redis_client.smembers(f"twitter_send_target:{twitter_id}"):

@@ -26,6 +26,8 @@ Available commands:
 /set_openai_enable_tools <true/false>
 /set_twitter_translation <true/false>
 /set_pixiv_translation <true/false>
+/set_pixiv_direct_translation <true/false>
+/set_pixiv_streaming_translation <true/false>
 /subscribe_twitter_user <twitter_username>
 /unsubscribe_twitter_user <twitter_username>
 /get_all_subscribed_users
@@ -41,6 +43,8 @@ async def status_command(update: Update, context: CallbackContext) -> None:
     openai_enable_tools = await get_redis_value(f"user:{user_id}:openai_enable_tools")
     twitter_translation = await get_redis_value(f"user:{user_id}:twitter_translation", "false")
     pixiv_translation = await get_redis_value(f"user:{user_id}:pixiv_translation", "false")
+    pixiv_direct_translation = await get_redis_value(f"user:{user_id}:pixiv_direct_translation", "true")
+    pixiv_streaming_translation = await get_redis_value(f"user:{user_id}:pixiv_streaming_translation", "true")
 
     await update.effective_message.reply_text(f"""
 Status:
@@ -50,6 +54,8 @@ Status:
 - OpenAI enable tools: {openai_enable_tools}
 - Twitter translation: {twitter_translation}
 - Pixiv translation: {pixiv_translation}
+- Pixiv direct translation: {pixiv_direct_translation}
+- Pixiv streaming translation: {pixiv_streaming_translation}
 """, reply_to_message_id=update.effective_message.message_id)
 
 
@@ -129,6 +135,8 @@ set_openai_model_command = set_key_command("openai_model")
 set_openai_enable_tools_command = set_key_command("openai_enable_tools")
 set_twitter_translation_command = set_key_command("twitter_translation")
 set_pixiv_translation_command = set_key_command("pixiv_translation")
+set_pixiv_direct_translation_command = set_key_command('pixiv_direct_translation')
+set_pixiv_streaming_translation_command = set_key_command('pixiv_streaming_translation')
 
 subscribe_twitter_user_command = call_function_with_one_param_command(subscribe_twitter_user)
 unsubscribe_twitter_user_command = call_function_with_one_param_command(unsubscribe_twitter_user)

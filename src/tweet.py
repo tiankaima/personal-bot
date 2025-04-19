@@ -250,12 +250,11 @@ async def check_for_new_tweets(context: CallbackContext):
     logger.debug("Checking for new tweets")
 
     # randomly select one twitter_id from twitter_ids
-    twitter_id_raw = await redis_client.srandmember("twitter_ids")
-    if not twitter_id_raw:
+    twitter_id = await redis_client.srandmember("twitter_ids")
+    if not twitter_id:
         logger.debug("No twitter_ids found, skipping")
         return
 
-    twitter_id = twitter_id_raw.decode("utf-8")
     logger.debug(f"Selected twitter_id: {twitter_id}")
 
     # fetch the tweets

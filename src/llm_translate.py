@@ -1,7 +1,9 @@
-import openai
-import os
 import asyncio
+import os
 import re
+
+import openai
+
 from core import logger
 
 
@@ -54,7 +56,7 @@ async def translate_text_by_page(
         openai_api_key: str,
         openai_api_endpoint: str | None = None,
         openai_model: str | None = None
-) -> list[str]:
+) -> str:
     if not openai_api_key:
         raise Exception("OpenAI API key is required")
 
@@ -111,6 +113,7 @@ async def main():
     text_to_translate = novel["content"]
 
     print(await translate_text_by_page(text_to_translate, OPENAI_API_KEY, OPENAI_API_ENDPOINT, OPENAI_MODEL))
+
 
 if __name__ == "__main__":
     asyncio.run(main())

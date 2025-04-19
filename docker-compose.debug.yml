@@ -8,6 +8,9 @@ services:
             - meta
         env_file:
             - .env
+        volumes:
+            - ./src:/app
+            - ./logs:/app/logs
         develop:
             watch:
                 - action: rebuild

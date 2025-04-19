@@ -1,16 +1,18 @@
-from utils import split_content_by_delimiter
-from llm_translate import translate_text_by_page
-
-from core import logger, redis_client
-import httpx
+import json
 import os
 import re
-import json
-from telegraph.aio import Telegraph
+
+import httpx
 from telegram.ext import ContextTypes
+from telegraph.aio import Telegraph
+
+from core import logger, redis_client
+from llm_translate import translate_text_by_page
+from utils import split_content_by_delimiter
 
 telegraph = Telegraph()
 
+PIXIV_NOVEL_URL_REGEX = re.compile(r"https://www.pixiv.net/novel/show.php\?id=(\d+).*")
 
 PIXIV_COOKIE = os.getenv('PIXIV_COOKIE')
 if not PIXIV_COOKIE:
@@ -80,7 +82,13 @@ async def send_to_telegraph(title: str, content: str, author_name: str, author_u
     return [page['url'] for page in pages]
 
 
-async def send_pixiv_novel(novel_id: str, context: ContextTypes.DEFAULT_TYPE, user_id: int, message_id: int):
+async def send_pixiv_novel(url: str, context: ContextTypes.DEFAULT_TYPE, user_id: int, message_id: int):
+    match = PIXIV_NOVEL_URL_REGEX.match(url)
+    if not match:
+        logger.warning(f"Invalid Pixiv novel URL: {url}")
+        return
+
+    novel_id = match.group(1)
     novel = await get_novel(novel_id)
 
     page_urls = await send_to_telegraph(

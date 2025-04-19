@@ -14,7 +14,7 @@ To remember which tweets are already sent, we store:
 
 tweet_id_sent:tweet_id -> 1
 
-and finally we maintain a combined list of all the twitter_ids that we are watching. (This list would be only ipdates when `twitter_send_target` is created/a list turn empty)
+and finally we maintain a combined list of all the twitter_ids that we are watching. (This list would be only ypdates when `twitter_send_target` is created/a list turn empty)
 
 ---
 
@@ -22,7 +22,7 @@ update (2025-02-02)
 
 we divide the sending process into two parts:
 
-- fetch tweet url from twitter
+- fetch tweet url from Twitter
 - send tweet to telegram
 
 an additional set is used to cache the fetched tweet urls:
@@ -30,16 +30,18 @@ an additional set is used to cache the fetched tweet urls:
 tweet_url_to_be_sent: [tweet_url1, tweet_url2, ...]
 """
 
-from core import logger, redis_client
-from telegram.ext import CallbackContext
-from telegram import Update, InputMediaPhoto, InputMediaVideo, LinkPreviewOptions
-import os
-import httpx
-import re
-import json
-from datetime import datetime
-import random
 import asyncio
+import json
+import os
+import random
+import re
+from datetime import datetime
+
+import httpx
+from telegram import InputMediaPhoto, InputMediaVideo, LinkPreviewOptions
+from telegram.ext import CallbackContext
+
+from core import logger, redis_client
 
 TWITTER_COOKIE = os.getenv("TWITTER_COOKIE")
 if not TWITTER_COOKIE:
@@ -67,7 +69,6 @@ Pragma: no-cache
 Cache-Control: no-cache
 """
 
-
 HEADERS = {
     line.split(": ")[0]: line.split(": ")[1]
     for line in RAW_HEADERS.split("\n")
@@ -76,34 +77,28 @@ HEADERS = {
 
 
 async def subscribe_twitter_user(username: str, chat_id: int):
-    logger.info(f"Subscribing to {username} for chat {chat_id}")
-
-    # add to twitter_send_target
     await redis_client.sadd(f"twitter_send_target:{username}", chat_id)
-
-    # add to telegram_sub_target
     await redis_client.sadd(f"telegram_sub_target:{chat_id}", username)
-
-    # add to twitter_ids
     await redis_client.sadd("twitter_ids", username)
 
 
 async def unsubscribe_twitter_user(username: str, chat_id: int):
-    logger.info(f"Unsubscribing from {username} for chat {chat_id}")
-
-    # remove from twitter_send_target
     await redis_client.srem(f"twitter_send_target:{username}", chat_id)
-
-    # remove from telegram_sub_target
     await redis_client.srem(f"telegram_sub_target:{chat_id}", username)
-
-    # remove from twitter_ids
-    # Only remove from twitter_ids if no one else is subscribed to this user
     if not await redis_client.scard(f"twitter_send_target:{username}"):
         await redis_client.srem("twitter_ids", username)
 
 
-async def send_tweet(url: str, context: CallbackContext, chat_id: int, reply_to_message_id: int | None = None, can_ignore: bool = False) -> None:
+async def get_all_subscribed_users(chat_id: int) -> list[str]:
+    twitter_usernames = await redis_client.smembers(f"telegram_sub_target:{chat_id}")
+    if not twitter_usernames:
+        return []
+    twitter_usernames = [username.decode("utf-8") for username in twitter_usernames]
+    return twitter_usernames
+
+
+async def send_tweet(url: str, context: CallbackContext, chat_id: int, reply_to_message_id: int | None = None,
+                     can_ignore: bool = False) -> None:
     async with httpx.AsyncClient() as client:
         url = url.replace("x.com", "twitter.com").replace('twitter.com', 'api.fxtwitter.com')
 
@@ -151,7 +146,8 @@ async def send_tweet(url: str, context: CallbackContext, chat_id: int, reply_to_
                     medias.append(InputMediaVideo(media['variants'][3]['url']))
                 elif media['type'] == 'gif':
                     medias.append(InputMediaVideo(media['variants'][0]['url']))
-            await context.bot.send_media_group(chat_id=chat_id, media=medias, reply_to_message_id=reply_to_message_id, caption=caption, parse_mode="HTML", write_timeout=20)
+            await context.bot.send_media_group(chat_id=chat_id, media=medias, reply_to_message_id=reply_to_message_id,
+                                               caption=caption, parse_mode="HTML", write_timeout=20)
         except Exception as e:
             logger.error(f"Error fetching media for tweet {url}: {e}")
             medias = []
@@ -168,14 +164,17 @@ async def send_tweet(url: str, context: CallbackContext, chat_id: int, reply_to_
                         response = await client.get(media['variants'][0]['url'])
                         medias.append(InputMediaVideo(response.content))
 
-            await context.bot.send_media_group(chat_id=chat_id, media=medias, reply_to_message_id=reply_to_message_id, caption=caption, parse_mode="HTML", write_timeout=20)
+            await context.bot.send_media_group(chat_id=chat_id, media=medias, reply_to_message_id=reply_to_message_id,
+                                               caption=caption, parse_mode="HTML", write_timeout=20)
 
     else:
         if can_ignore and SEND_ONLY_WITH_MEDIA:
             logger.info(f"Ignoring tweet {url} because it has no media and SEND_ONLY_WITH_MEDIA is true")
             return
 
-        await context.bot.send_message(chat_id=chat_id, text=caption, parse_mode="HTML", reply_to_message_id=reply_to_message_id, link_preview_options=LinkPreviewOptions(is_disabled=True))
+        await context.bot.send_message(chat_id=chat_id, text=caption, parse_mode="HTML",
+                                       reply_to_message_id=reply_to_message_id,
+                                       link_preview_options=LinkPreviewOptions(is_disabled=True))
 
 
 async def fetch_tweets(twitter_id: str) -> list[str]:

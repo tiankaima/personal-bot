@@ -1,4 +1,5 @@
 redis-data/
+logs/
 config.yaml
 
 # Created by https://www.toptal.com/developers/gitignore/api/python

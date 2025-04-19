@@ -5,6 +5,8 @@ services:
         depends_on:
             - redis
             - meta
+        volumes:
+            - ./logs:/app/logs
         env_file:
             - .env
 

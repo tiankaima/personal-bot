@@ -4,9 +4,35 @@ utils.py
 Aims to clean out LLM output, cleans out non-existing HTML tags, and closes open tags
 """
 
+import asyncio
 from html.parser import HTMLParser
 import httpx
-import asyncio
+from datetime import datetime, timedelta
+from functools import wraps
+from typing import Callable, Any, Optional, TypeVar, Union
+from telegram import Update
+from telegram.ext import ContextTypes
+
+from core import logger, redis_client
+
+T = TypeVar('T')
+
+
+async def get_redis_value(key: str, default: Optional[T] = None) -> Optional[str]:
+    """
+    Get a value from Redis and decode it from bytes to string.
+
+    Args:
+        key: The Redis key to retrieve
+        default: Default value to return if key doesn't exist
+
+    Returns:
+        The decoded string value or default if key doesn't exist
+    """
+    value = await redis_client.get(key)
+    if value is None:
+        return default
+    return value.decode('utf-8')
 
 
 def split_content_by_delimiter(content: str, delimiter: str, chunk_size: int = 20000) -> list[str]:
@@ -119,7 +145,8 @@ WEB_TEST_CASES = [
     """
 ]
 
-TAGS_TO_KEEP = ["body", "h1", "h2", "h3", "h4", "h5", "h6", "p", "a", "ul", "ol", "li", "blockquote", "code", "pre", "table", "thead", "tbody", "tfoot", "tr", "td", "th", "article"]
+TAGS_TO_KEEP = ["body", "h1", "h2", "h3", "h4", "h5", "h6", "p", "a", "ul", "ol", "li", "blockquote", "code", "pre",
+                "table", "thead", "tbody", "tfoot", "tr", "td", "th", "article"]
 ATTRIBUTES_TO_KEEP = ["alt"]
 
 
@@ -157,19 +184,44 @@ def clean_web_html(html: str) -> str:
     return result
 
 
+def rate_limit(time_window: timedelta, limit: int):
+    """
+    Decorator to limit the rate of interactions for a user.
+
+    Args:
+        limit: Maximum number of interactions allowed in the time window
+        time_window: Time window for the rate limit
+    """
+    def decorator(func: Callable[[Update, ContextTypes.DEFAULT_TYPE], Any]) -> Callable[[Update, ContextTypes.DEFAULT_TYPE], Any]:
+        @wraps(func)
+        async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Any:
+            if not update.message or not update.message.from_user:
+                return
+
+            user_id = update.message.from_user.id
+            interaction_key = f"user:{user_id}:interactions"
+
+            # Check interaction limit
+            interaction_times_raw = await redis_client.lrange(interaction_key, 0, -1)
+            interaction_times_decoded = [datetime.fromtimestamp(float(ts.decode('utf-8'))) for ts in interaction_times_raw]
+            interaction_times = [ts for ts in interaction_times_decoded if datetime.now() - ts < time_window]
+
+            if len(interaction_times) >= limit:
+                await update.message.reply_text('Interaction limit reached. Please try again later.')
+                logger.info(f"Rate limit exceeded for user {user_id}")
+                return
+
+            # Record interaction time
+            await redis_client.rpush(interaction_key, datetime.now().timestamp())
+            await redis_client.ltrim(interaction_key, -limit, -1)
+
+            return await func(update, context)
+        return wrapper
+    return decorator
+
+
 async def get_web_content(url: str) -> str:
     async with httpx.AsyncClient() as client:
         response = await client.get(url)
         return response.text
         # return clean_web_html(response.text)
-
-if __name__ == "__main__":
-    for test_case in TEST_CASES:
-        print(clean_html(test_case))
-        print("-" * 100)
-
-    for test_case in WEB_TEST_CASES:
-        print(clean_web_html(test_case))
-        print("-" * 100)
-
-    asyncio.run(get_web_content("https://www.google.com"))

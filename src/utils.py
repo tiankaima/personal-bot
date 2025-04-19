@@ -162,8 +162,8 @@ def rate_limit(time_window: timedelta, limit: int):
             interaction_key = f"user:{user_id}:interactions"
 
             # Check interaction limit
-            interaction_times_raw = await redis_client.lrange(interaction_key, 0, -1)
-            interaction_times_decoded = [datetime.fromtimestamp(float(ts.decode('utf-8'))) for ts in interaction_times_raw]
+            interaction_times_list = await redis_client.lrange(interaction_key, 0, -1)
+            interaction_times_decoded = [datetime.fromtimestamp(float(ts)) for ts in interaction_times_list]
             interaction_times = [ts for ts in interaction_times_decoded if datetime.now() - ts < time_window]
 
             if len(interaction_times) >= limit:

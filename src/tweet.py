@@ -125,8 +125,9 @@ async def send_tweet(
             openai_api_key = await get_redis_value(f'user:{user_id}:openai_api_key')
             openai_api_endpoint = await get_redis_value(f'user:{user_id}:openai_api_endpoint')
             openai_model = await get_redis_value(f'user:{user_id}:openai_model')
+            twitter_translation = (await get_redis_value(f'user:{user_id}:twitter_translation', 'false')).lower() == 'true'
 
-            if openai_api_key:
+            if openai_api_key and twitter_translation:
                 logger.debug(f"Translating tweet {url} to {openai_model}")
 
                 translated = (await translate_text(

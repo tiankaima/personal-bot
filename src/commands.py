@@ -24,6 +24,8 @@ Available commands:
 /set_openai_endpoint <your_openai_api_endpoint>
 /set_openai_model <your_openai_model>
 /set_openai_enable_tools <true/false>
+/set_twitter_translation <true/false>
+/set_pixiv_translation <true/false>
 /subscribe_twitter_user <twitter_username>
 /unsubscribe_twitter_user <twitter_username>
 /get_all_subscribed_users
@@ -37,6 +39,8 @@ async def status_command(update: Update, context: CallbackContext) -> None:
     openai_api_endpoint = await get_redis_value(f"user:{user_id}:openai_api_endpoint")
     openai_model = await get_redis_value(f"user:{user_id}:openai_model")
     openai_enable_tools = await get_redis_value(f"user:{user_id}:openai_enable_tools")
+    twitter_translation = await get_redis_value(f"user:{user_id}:twitter_translation", "false")
+    pixiv_translation = await get_redis_value(f"user:{user_id}:pixiv_translation", "false")
 
     await update.effective_message.reply_text(f"""
 Status:
@@ -44,6 +48,8 @@ Status:
 - OpenAI API endpoint: {openai_api_endpoint}
 - OpenAI model: {openai_model}
 - OpenAI enable tools: {openai_enable_tools}
+- Twitter translation: {twitter_translation}
+- Pixiv translation: {pixiv_translation}
 """, reply_to_message_id=update.effective_message.message_id)
 
 
@@ -121,6 +127,8 @@ set_openai_key_command = set_key_command("openai_api_key")
 set_openai_endpoint_command = set_key_command("openai_api_endpoint")
 set_openai_model_command = set_key_command("openai_model")
 set_openai_enable_tools_command = set_key_command("openai_enable_tools")
+set_twitter_translation_command = set_key_command("twitter_translation")
+set_pixiv_translation_command = set_key_command("pixiv_translation")
 
 subscribe_twitter_user_command = call_function_with_one_param_command(subscribe_twitter_user)
 unsubscribe_twitter_user_command = call_function_with_one_param_command(unsubscribe_twitter_user)

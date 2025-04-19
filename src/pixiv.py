@@ -110,8 +110,9 @@ async def send_pixiv_novel(
     openai_api_key = await get_redis_value(f'user:{user_id}:openai_api_key')
     openai_api_endpoint = await get_redis_value(f'user:{user_id}:openai_api_endpoint')
     openai_model = await get_redis_value(f'user:{user_id}:openai_model')
+    pixiv_translation = (await get_redis_value(f'user:{user_id}:pixiv_translation', 'false')).lower() == 'true'
 
-    if not openai_api_key:
+    if not openai_api_key or not pixiv_translation:
         return
 
     translated_content = await translate_text_by_page(

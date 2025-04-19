@@ -42,6 +42,8 @@ from telegram import InputMediaPhoto, InputMediaVideo, LinkPreviewOptions
 from telegram.ext import CallbackContext
 
 from core import logger, redis_client
+from llm_translate import translate_text
+from utils import get_redis_value
 
 TWITTER_COOKIE = os.getenv("TWITTER_COOKIE")
 if not TWITTER_COOKIE:
@@ -97,8 +99,14 @@ async def get_all_subscribed_users(chat_id: int) -> list[str]:
     return twitter_usernames
 
 
-async def send_tweet(url: str, context: CallbackContext, chat_id: int, reply_to_message_id: int | None = None,
-                     can_ignore: bool = False) -> None:
+async def send_tweet(
+        url: str,
+        context: CallbackContext,
+        user_id: int,
+        chat_id: int,
+        reply_to_message_id: int | None = None,
+        can_ignore: bool = False
+) -> None:
     async with httpx.AsyncClient() as client:
         url = url.replace("x.com", "twitter.com").replace('twitter.com', 'api.fxtwitter.com')
 
@@ -112,15 +120,42 @@ async def send_tweet(url: str, context: CallbackContext, chat_id: int, reply_to_
         logger.info(f"Ignoring tweet {url} because it's a retweet")
         return
 
-    def info_to_caption(info: dict) -> str:
+    async def info_to_caption(info: dict) -> str:
         if len(info['text']):
-            return f"""
+            openai_api_key = await get_redis_value(f'user:{user_id}:openai_api_key')
+            openai_api_endpoint = await get_redis_value(f'user:{user_id}:openai_api_endpoint')
+            openai_model = await get_redis_value(f'user:{user_id}:openai_model')
+
+            if openai_api_key:
+                logger.info(f"Translating tweet {url} to {openai_model}")
+
+                translated = (await translate_text(
+                    info['text'],
+                    openai_api_key=openai_api_key,
+                    openai_api_endpoint=openai_api_endpoint,
+                    openai_model=openai_model
+                )).strip(' \n')
+
+                return f"""
+<b>{info['author']['name']}</b> (<a href="{info['author']['url']}">@{info['author']['screen_name']}</a>)
+
+{info['text'].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")}
+
+===
+
+{translated.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")}
+
+<a href="{info['url']}">{create_timestamp_str}</a>
+"""
+            else:
+                return f"""
 <b>{info['author']['name']}</b> (<a href="{info['author']['url']}">@{info['author']['screen_name']}</a>)
 
 {info['text'].replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")}
 
 <a href="{info['url']}">{create_timestamp_str}</a>
 """
+
         else:
             return f"""
 <b>{info['author']['name']}</b> (<a href="{info['author']['url']}">@{info['author']['screen_name']}</a>)
@@ -128,11 +163,11 @@ async def send_tweet(url: str, context: CallbackContext, chat_id: int, reply_to_
 <a href="{info['url']}">{create_timestamp_str}</a>
 """
 
-    caption = info_to_caption(info['tweet'])
+    caption = await info_to_caption(info['tweet'])
 
     if "quote" in info['tweet']:
         caption += "<blockquote>"
-        caption += info_to_caption(info['tweet']['quote'])
+        caption += await info_to_caption(info['tweet']['quote'])
         caption += "</blockquote>"
 
     if "media" in info['tweet']:
@@ -146,8 +181,16 @@ async def send_tweet(url: str, context: CallbackContext, chat_id: int, reply_to_
                     medias.append(InputMediaVideo(media['variants'][3]['url']))
                 elif media['type'] == 'gif':
                     medias.append(InputMediaVideo(media['variants'][0]['url']))
-            await context.bot.send_media_group(chat_id=chat_id, media=medias, reply_to_message_id=reply_to_message_id,
-                                               caption=caption, parse_mode="HTML", write_timeout=20)
+
+            await context.bot.send_media_group(
+                chat_id=chat_id,
+                media=medias,
+                reply_to_message_id=reply_to_message_id,
+                caption=caption,
+                parse_mode="HTML",
+                write_timeout=20
+            )
+
         except Exception as e:
             logger.error(f"Error fetching media for tweet {url}: {e}")
             medias = []
@@ -164,17 +207,27 @@ async def send_tweet(url: str, context: CallbackContext, chat_id: int, reply_to_
                         response = await client.get(media['variants'][0]['url'])
                         medias.append(InputMediaVideo(response.content))
 
-            await context.bot.send_media_group(chat_id=chat_id, media=medias, reply_to_message_id=reply_to_message_id,
-                                               caption=caption, parse_mode="HTML", write_timeout=20)
+            await context.bot.send_media_group(
+                chat_id=chat_id,
+                media=medias,
+                reply_to_message_id=reply_to_message_id,
+                caption=caption,
+                parse_mode="HTML",
+                write_timeout=20
+            )
 
     else:
         if can_ignore and SEND_ONLY_WITH_MEDIA:
             logger.info(f"Ignoring tweet {url} because it has no media and SEND_ONLY_WITH_MEDIA is true")
             return
 
-        await context.bot.send_message(chat_id=chat_id, text=caption, parse_mode="HTML",
-                                       reply_to_message_id=reply_to_message_id,
-                                       link_preview_options=LinkPreviewOptions(is_disabled=True))
+        await context.bot.send_message(
+            chat_id=chat_id,
+            text=caption,
+            parse_mode="HTML",
+            reply_to_message_id=reply_to_message_id,
+            link_preview_options=LinkPreviewOptions(is_disabled=True)
+        )
 
 
 async def fetch_tweets(twitter_id: str) -> list[str]:

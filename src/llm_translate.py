@@ -34,11 +34,9 @@ async def translate_text(text: str, openai_api_key: str, openai_api_endpoint: st
 
             translated_text = response.choices[0].message.content
 
-            logger.info(f"Translated text: {translated_text}")
-
             # remove anything in <think></think>
-            translated_text = re.sub(r'<think>(.|\n)*</think>', '', translated_text)
-            translated_text = re.sub(r'<.*?>', '', translated_text)
+            #translated_text = re.sub(r'<think>(.|\n)*</think>', '', translated_text)
+            #translated_text = re.sub(r'<.*?>', '', translated_text)
 
             return translated_text
 

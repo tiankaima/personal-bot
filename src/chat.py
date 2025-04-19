@@ -74,6 +74,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
     """
 
     user_id = update.message.from_user.id
+    chat_id = update.message.chat.id
     message_id = update.message.message_id
 
     if not update.message or not update.message.from_user:
@@ -84,11 +85,11 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         return
 
     if TWITTER_URL_REGEX.match(update.message.text):
-        await send_tweet(update.message.text, context, user_id, message_id)
+        await send_tweet(update.message.text, context, user_id, chat_id, message_id)
         return
 
     if PIXIV_NOVEL_URL_REGEX.match(update.message.text):
-        await send_pixiv_novel(update.message.text, context, user_id, message_id)
+        await send_pixiv_novel(update.message.text, context, user_id, chat_id, message_id)
         return
 
     openai_api_key = await get_redis_value(f"user:{user_id}:openai_api_key")

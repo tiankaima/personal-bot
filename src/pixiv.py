@@ -8,7 +8,7 @@ from telegraph.aio import Telegraph
 
 from core import logger, redis_client
 from llm_translate import translate_text_by_page
-from utils import split_content_by_delimiter
+from utils import split_content_by_delimiter, get_redis_value
 
 telegraph = Telegraph()
 
@@ -82,7 +82,13 @@ async def send_to_telegraph(title: str, content: str, author_name: str, author_u
     return [page['url'] for page in pages]
 
 
-async def send_pixiv_novel(url: str, context: ContextTypes.DEFAULT_TYPE, user_id: int, message_id: int):
+async def send_pixiv_novel(
+    url: str,
+    context: ContextTypes.DEFAULT_TYPE,
+    user_id: int,
+    chat_id: int,
+    message_id: int
+):
     match = PIXIV_NOVEL_URL_REGEX.match(url)
     if not match:
         logger.warning(f"Invalid Pixiv novel URL: {url}")
@@ -101,18 +107,18 @@ async def send_pixiv_novel(url: str, context: ContextTypes.DEFAULT_TYPE, user_id
     for page_url in page_urls:
         await context.bot.send_message(chat_id=user_id, text=page_url, reply_to_message_id=message_id)
 
-    openai_api_key = (await redis_client.get(f"user:{user_id}:openai_api_key")) or b''
-    openai_api_endpoint = (await redis_client.get(f"user:{user_id}:openai_api_endpoint")) or b''
-    openai_model = (await redis_client.get(f"user:{user_id}:openai_model")) or b''
+    openai_api_key = await get_redis_value(f'user:{user_id}:openai_api_key')
+    openai_api_endpoint = await get_redis_value(f'user:{user_id}:openai_api_endpoint')
+    openai_model = await get_redis_value(f'user:{user_id}:openai_model')
 
     if not openai_api_key:
         return
 
     translated_content = await translate_text_by_page(
         novel["content"],
-        openai_api_key.decode('utf-8'),
-        openai_api_endpoint.decode('utf-8'),
-        openai_model.decode('utf-8')
+        openai_api_key,
+        openai_api_endpoint,
+        openai_model
     )
 
     page_urls = await send_to_telegraph(
@@ -123,4 +129,4 @@ async def send_pixiv_novel(url: str, context: ContextTypes.DEFAULT_TYPE, user_id
     )
 
     for page_url in page_urls:
-        await context.bot.send_message(chat_id=user_id, text=page_url, reply_to_message_id=message_id)
+        await context.bot.send_message(chat_id=chat_id, text=page_url, reply_to_message_id=message_id)

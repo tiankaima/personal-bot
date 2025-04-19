@@ -54,34 +54,6 @@ def split_content_by_delimiter(content: str, delimiter: str, chunk_size: int = 2
 
 
 ACCEPTABLE_HTML_TAGS = ["b", "strong", "i", "em", "code", "s", "strike", "del", "pre"]
-TEST_CASES = [
-    """
-    <i>Hello, <b>world!</b></i>""",
-    """
-    <i>Hello, <b>world!</b>""",
-    """
-    <i>Hello, <b>world!</i>""",
-    """
-    Got it! Here's an example of HTML with unmatched tags:
-    
-    <b>This is a bold text</i>
-    <i>This is italic text</b>
-    <code>This is inline code</s>
-    <s>This is strikethrough text</code>
-    
-    Let me know if you need
-    """,
-    """
-    Sure! Here's an example of HTML with unmatched tags:
-    
-    <b>This is a bold text</i>
-    <i>This is italic text</b>
-    <code>This is inline code</s>
-    <s>This is strikethrough text</code>
-    
-    Let me know if you need further help.
-    """
-]
 
 
 def clean_html(html: str) -> str:
@@ -126,25 +98,6 @@ def clean_html(html: str) -> str:
     return result
 
 
-WEB_TEST_CASES = [
-    """
-    <div>
-    <h1>Hello, world!</h1>
-    <p>This is a paragraph</p>
-    <a href="https://www.google.com">Google</a>
-    <img src="https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png" alt="Google Logo">
-    <script>
-    console.log("Hello, world!");
-    </script>
-    <style>
-    body {
-        background-color: red;
-    }
-    </style>
-    </div>
-    """
-]
-
 TAGS_TO_KEEP = ["body", "h1", "h2", "h3", "h4", "h5", "h6", "p", "a", "ul", "ol", "li", "blockquote", "code", "pre",
                 "table", "thead", "tbody", "tfoot", "tr", "td", "th", "article"]
 ATTRIBUTES_TO_KEEP = ["alt"]
@@ -184,6 +137,13 @@ def clean_web_html(html: str) -> str:
     return result
 
 
+async def get_web_content(url: str) -> str:
+    async with httpx.AsyncClient() as client:
+        response = await client.get(url)
+        return response.text
+        # return clean_web_html(response.text)
+
+
 def rate_limit(time_window: timedelta, limit: int):
     """
     Decorator to limit the rate of interactions for a user.
@@ -218,10 +178,3 @@ def rate_limit(time_window: timedelta, limit: int):
             return await func(update, context)
         return wrapper
     return decorator
-
-
-async def get_web_content(url: str) -> str:
-    async with httpx.AsyncClient() as client:
-        response = await client.get(url)
-        return response.text
-        # return clean_web_html(response.text)

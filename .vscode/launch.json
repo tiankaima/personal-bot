@@ -23,7 +23,7 @@
                 }
             ],
             "preLaunchTask": "Run docker-compose.debug.yml",
-            "postDebugTask": "Stop docker-compose.debug.yml"
+            // "postDebugTask": "Stop docker-compose.debug.yml"
         },
     ]
 }

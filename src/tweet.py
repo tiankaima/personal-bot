@@ -284,7 +284,13 @@ async def send_tweets(context: CallbackContext):
         for chat_id in await redis_client.smembers(f"twitter_send_target:{twitter_id}"):
             chat_id = int(chat_id)
             try:
-                await send_tweet(tweet_url, context, chat_id, can_ignore=True)
+                await send_tweet(
+                    url=tweet_url,
+                    context=context,
+                    user_id=chat_id,
+                    chat_id=chat_id,
+                    can_ignore=True
+                )
                 logger.info(f"Sent {tweet_url} to chat {chat_id}")
             except Exception as e:
                 logger.error(f"Error sending tweet {tweet_url} to chat {chat_id}: {e}")

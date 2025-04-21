@@ -223,11 +223,34 @@ async def get_redis_command(update: Update, context: CallbackContext) -> None:
         return
 
     key = context.args[0]
-    value = await redis_client.get(key)
-    if value is None:
+
+    # Check key type
+    key_type = await redis_client.type(key)
+    if key_type == "none":
         await update.effective_message.reply_text(f"Key '{key}' not found", reply_to_message_id=update.effective_message.message_id)
+        return
+
+    message = f"Key: {key}\nType: {key_type}\nValue(s):\n"
+
+    if key_type == "string":
+        value = await redis_client.get(key)
+        message += f"- {value}"
+    elif key_type == "list":
+        values = await redis_client.lrange(key, 0, -1)
+        for i, value in enumerate(values):
+            message += f"- [{i}] {value}\n"
+    elif key_type == "set":
+        values = await redis_client.smembers(key)
+        for value in values:
+            message += f"- {value}\n"
+    elif key_type == "hash":
+        values = await redis_client.hgetall(key)
+        for field, value in values.items():
+            message += f"- {field}: {value}\n"
     else:
-        await update.effective_message.reply_text(f"Key: {key}\nValue: {value}", reply_to_message_id=update.effective_message.message_id)
+        message += f"Unsupported type: {key_type}"
+
+    await update.effective_message.reply_text(message, reply_to_message_id=update.effective_message.message_id)
 
 
 @admin_required
@@ -238,7 +261,31 @@ async def set_redis_command(update: Update, context: CallbackContext) -> None:
 
     key = context.args[0]
     value = ' '.join(context.args[1:])
-    await redis_client.set(key, value)
+
+    # Check if key exists and its type
+    key_type = await redis_client.type(key)
+
+    if key_type == "none":
+        # New key, default to string
+        await redis_client.set(key, value)
+    elif key_type == "string":
+        await redis_client.set(key, value)
+    elif key_type == "list":
+        await redis_client.rpush(key, value)
+    elif key_type == "set":
+        await redis_client.sadd(key, value)
+    elif key_type == "hash":
+        # For hash, expect format: field value
+        parts = value.split(' ', 1)
+        if len(parts) != 2:
+            await update.effective_message.reply_text('For hash type, use format: /set_redis <key> <field> <value>', reply_to_message_id=update.effective_message.message_id)
+            return
+        field, value = parts
+        await redis_client.hset(key, field, value)
+    else:
+        await update.effective_message.reply_text(f"Unsupported type: {key_type}", reply_to_message_id=update.effective_message.message_id)
+        return
+
     await update.effective_message.set_reaction("👌")
 
 
@@ -280,14 +327,16 @@ async def list_redis_command(update: Update, context: CallbackContext) -> None:
             batch = keys[i:i + batch_size]
             message = f"Keys matching pattern '{pattern}' (batch {i // batch_size + 1}/{(total_keys - 1) // batch_size + 1}):\n\n"
             for key in batch:
-                message += f"• {key}\n"
+                key_type = await redis_client.type(key)
+                message += f"• ({key_type}) {key}\n"
             await update.effective_message.reply_text(message, reply_to_message_id=update.effective_message.message_id)
     else:
         # In normal mode, limit to first 20 keys
         keys = keys[:20]
         message = f"Keys matching pattern '{pattern}' (showing first 20):\n\n"
         for key in keys:
-            message += f"• {key}\n"
+            key_type = await redis_client.type(key)
+            message += f"• ({key_type}) {key}\n"
 
         if len(keys) >= 20:
             message += "\nNote: Showing first 20 keys. Use /list_redis ;<pattern> to see all keys in batches."

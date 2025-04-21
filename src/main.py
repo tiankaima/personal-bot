@@ -5,7 +5,9 @@ from telegram.ext import CommandHandler, MessageHandler, filters, ApplicationBui
 
 from chat import handle_message
 from commands import set_openai_key_command, set_openai_endpoint_command, set_openai_model_command, set_openai_enable_tools_command, start_command, \
-    help_command, subscribe_twitter_user_command, unsubscribe_twitter_user_command, status_command, get_all_subscribed_users_command, set_twitter_translation_command, set_pixiv_translation_command, set_pixiv_direct_translation_command, set_pixiv_streaming_translation_command
+    help_command, subscribe_twitter_user_command, unsubscribe_twitter_user_command, status_command, get_all_subscribed_users_command, set_twitter_translation_command, set_pixiv_translation_command, set_pixiv_direct_translation_command, set_pixiv_streaming_translation_command, \
+    set_system_prompt_command, reset_system_prompt_command, show_system_prompt_command, list_twitter_subscription_command, \
+    get_redis_command, set_redis_command, del_redis_command, list_redis_command
 from core import logger
 from tweet import check_for_new_tweets, send_tweets
 
@@ -58,6 +60,22 @@ async def handle_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             await unsubscribe_twitter_user_command(update, context)
         elif command == 'get_all_subscribed_users':
             await get_all_subscribed_users_command(update, context)
+        elif command == 'set_system_prompt':
+            await set_system_prompt_command(update, context)
+        elif command == 'reset_system_prompt':
+            await reset_system_prompt_command(update, context)
+        elif command == 'show_system_prompt':
+            await show_system_prompt_command(update, context)
+        elif command == 'list_twitter_subscription':
+            await list_twitter_subscription_command(update, context)
+        elif command == 'get_redis':
+            await get_redis_command(update, context)
+        elif command == 'set_redis':
+            await set_redis_command(update, context)
+        elif command == 'del_redis':
+            await del_redis_command(update, context)
+        elif command == 'list_redis':
+            await list_redis_command(update, context)
 
 
 def main() -> None:
@@ -82,6 +100,14 @@ def main() -> None:
     app.add_handler(CommandHandler("subscribe_twitter_user", subscribe_twitter_user_command))
     app.add_handler(CommandHandler("unsubscribe_twitter_user", unsubscribe_twitter_user_command))
     app.add_handler(CommandHandler("get_all_subscribed_users", get_all_subscribed_users_command))
+    app.add_handler(CommandHandler("set_system_prompt", set_system_prompt_command))
+    app.add_handler(CommandHandler("reset_system_prompt", reset_system_prompt_command))
+    app.add_handler(CommandHandler("show_system_prompt", show_system_prompt_command))
+    app.add_handler(CommandHandler("list_twitter_subscription", list_twitter_subscription_command))
+    app.add_handler(CommandHandler("get_redis", get_redis_command))
+    app.add_handler(CommandHandler("set_redis", set_redis_command))
+    app.add_handler(CommandHandler("del_redis", del_redis_command))
+    app.add_handler(CommandHandler("list_redis", list_redis_command))
     app.add_handler(MessageHandler(filters.UpdateType.CHANNEL_POSTS & filters.COMMAND, handle_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 

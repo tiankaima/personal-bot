@@ -3,6 +3,12 @@ tweet.py
 
 This file contains the logic for checking for new tweets, send new tweets to corresponding users.
 
+Redis key structure:
+- tweets:sent:{username}:{post_id} -> 1  # Track sent tweets
+- tweets:urls:queue -> [tweet_url1, tweet_url2, ...]  # Queue of tweet URLs to be sent
+- tweets:subscriptions:user:{telegram_id} -> [twitter_username1, twitter_username2, ...]  # User's subscriptions
+- tweets:targets:user:{twitter_username} -> [telegram_id1, telegram_id2, ...]  # Target users for each Twitter user
+
 This requires a many-to-many mapping between twitter_id and telegram_id, we store as:
 
 twitter_send_target:@username -> [telegram_id1, telegram_id2, ...]
@@ -12,9 +18,77 @@ whenever a user(chat) updates their preferences, we update the above two mapping
 
 To remember which tweets are already sent, we store:
 
-tweet_id_sent:tweet_id -> 1
+tweets:sent:{username}:{post_id} -> 1
 
 and finally we maintain a combined list of all the twitter_ids that we are watching. (This list would be only ypdates when `twitter_send_target` is created/a list turn empty)
+
+---
+update (2025-04-22)
+
+migration command: (stage 1)
+
+# Migrate tweet_id_sent to tweets:sent
+redis-cli --scan --pattern "tweet_id_sent:*" | while read key; do
+    new_key="tweets:sent:${key#tweet_id_sent:}"
+    redis-cli rename "$key" "$new_key"
+done
+
+# Migrate tweet_url_to_be_sent to tweets:urls:queue
+redis-cli rename tweet_url_to_be_sent tweets:urls:queue
+
+# Migrate telegram_sub_target to tweets:subscriptions:user
+redis-cli --scan --pattern "telegram_sub_target:*" | while read key; do
+    new_key="tweets:subscriptions:user:${key#telegram_sub_target:}"
+    redis-cli rename "$key" "$new_key"
+done
+
+# Migrate twitter_send_target to tweets:targets:user
+redis-cli --scan --pattern "twitter_send_target:*" | while read key; do
+    new_key="tweets:targets:user:${key#twitter_send_target:}"
+    redis-cli rename "$key" "$new_key"
+done
+
+migration command: (stage 2)
+
+# Migrate tweets:sent:{url} to tweets:sent:{username}:{post_id}
+redis-cli --scan --pattern "tweets:sent:https://x.com/*" | while read key; do
+    url="${key#tweets:sent:}"
+    username=$(echo "$url" | cut -d'/' -f4)
+    post_id=$(echo "$url" | cut -d'/' -f6)
+    new_key="tweets:sent:${username}:${post_id}"
+    redis-cli rename "$key" "$new_key"
+done
+
+Merged:
+
+#!/bin/bash
+
+# Migrate all tweet-related keys in one go
+redis-cli --scan --pattern "tweet_id_sent:*" | while read key; do
+    # Extract the URL from the old key
+    url="${key#tweet_id_sent:}"
+    # Extract username and post_id from URL
+    username=$(echo "$url" | cut -d'/' -f4)
+    post_id=$(echo "$url" | cut -d'/' -f6)
+    # Create new key and rename
+    new_key="tweets:sent:${username}:${post_id}"
+    redis-cli rename "$key" "$new_key"
+done
+
+# Rename the queue key
+redis-cli rename tweet_url_to_be_sent tweets:urls:queue
+
+# Migrate subscription keys
+redis-cli --scan --pattern "telegram_sub_target:*" | while read key; do
+    new_key="tweets:subscriptions:user:${key#telegram_sub_target:}"
+    redis-cli rename "$key" "$new_key"
+done
+
+# Migrate target keys
+redis-cli --scan --pattern "twitter_send_target:*" | while read key; do
+    new_key="tweets:targets:user:${key#twitter_send_target:}"
+    redis-cli rename "$key" "$new_key"
+done
 
 ---
 
@@ -78,24 +152,42 @@ HEADERS = {
 }
 
 
-async def subscribe_twitter_user(username: str, chat_id: int):
-    await redis_client.sadd(f"twitter_send_target:{username}", chat_id)
-    await redis_client.sadd(f"telegram_sub_target:{chat_id}", username)
-    await redis_client.sadd("twitter_ids", username)
+async def subscribe_twitter_user(twitter_username: str, chat_id: int) -> str | None:
+    twitter_username = twitter_username.lower()
+    if twitter_username.startswith('@'):
+        twitter_username = twitter_username[1:]
+
+    # Add to user's subscriptions
+    await redis_client.sadd(f"tweets:subscriptions:user:{chat_id}", twitter_username)
+    # Add to Twitter user's targets
+    await redis_client.sadd(f"tweets:targets:user:{twitter_username}", chat_id)
+
+    return f"Subscribed to @{twitter_username}"
 
 
-async def unsubscribe_twitter_user(username: str, chat_id: int):
-    await redis_client.srem(f"twitter_send_target:{username}", chat_id)
-    await redis_client.srem(f"telegram_sub_target:{chat_id}", username)
-    if not await redis_client.scard(f"twitter_send_target:{username}"):
-        await redis_client.srem("twitter_ids", username)
+async def unsubscribe_twitter_user(twitter_username: str, chat_id: int) -> str | None:
+    twitter_username = twitter_username.lower()
+    if twitter_username.startswith('@'):
+        twitter_username = twitter_username[1:]
+
+    # Remove from user's subscriptions
+    await redis_client.srem(f"tweets:subscriptions:user:{chat_id}", twitter_username)
+    # Remove from Twitter user's targets
+    await redis_client.srem(f"tweets:targets:user:{twitter_username}", chat_id)
+
+    return f"Unsubscribed from @{twitter_username}"
 
 
-async def get_all_subscribed_users(chat_id: int) -> list[str]:
-    twitter_usernames = await redis_client.smembers(f"telegram_sub_target:{chat_id}")
-    if not twitter_usernames:
-        return []
-    return twitter_usernames
+async def get_all_subscribed_users(chat_id: int) -> str | None:
+    subscribed_users = await redis_client.smembers(f"tweets:subscriptions:user:{chat_id}")
+    if not subscribed_users:
+        return "You are not subscribed to any Twitter users."
+
+    message = "Your subscribed Twitter users:\n\n"
+    for username in subscribed_users:
+        message += f"• @{username}\n"
+
+    return message
 
 
 async def send_tweet(
@@ -246,57 +338,68 @@ async def fetch_tweets(twitter_id: str) -> list[str]:
         return tweet_urls
 
 
-async def check_for_new_tweets(context: CallbackContext):
-    logger.debug("Checking for new tweets")
+async def check_for_new_tweets(context: CallbackContext) -> None:
+    logger.debug("Checking for new tweets...")
 
-    # randomly select one twitter_id from twitter_ids
-    twitter_id = await redis_client.srandmember("twitter_ids")
-    if not twitter_id:
-        logger.debug("No twitter_ids found, skipping")
+    # Get all Twitter usernames we're watching
+    twitter_usernames = set()
+    async for key in redis_client.scan_iter("tweets:targets:user:*"):
+        username = key.split(":")[-1]
+        twitter_usernames.add(username)
+
+    if not twitter_usernames:
+        logger.debug("No Twitter users to check")
         return
 
-    logger.debug(f"Selected twitter_id: {twitter_id}")
+    for username in twitter_usernames:
+        try:
+            tweet_urls = await fetch_tweets(username)
+            for tweet_url in tweet_urls:
+                # Extract post ID from URL
+                post_id = tweet_url.split("/")[-1]
+                # Check if tweet was already sent
+                if await redis_client.exists(f"tweets:sent:{username}:{post_id}"):
+                    continue
 
-    # fetch the tweets
-    tweet_urls = await fetch_tweets(twitter_id)
-    new_url_count = 0
+                # Add to queue
+                await redis_client.rpush(f"tweets:urls:queue", tweet_url)
+                # Mark as sent
+                await redis_client.set(f"tweets:sent:{username}:{post_id}", 1)
 
-    for tweet_url in tweet_urls:
-        # check if the tweet is already sent
-        if await redis_client.get(f"tweet_id_sent:{tweet_url}"):
-            continue
-
-        new_url_count += 1
-        await redis_client.sadd("tweet_url_to_be_sent", tweet_url)
-
-    logger.debug(f"Found {new_url_count} new tweets")
+        except Exception as e:
+            logger.error(f"Error checking tweets for @{username}: {e}", exc_info=True)
 
 
-async def send_tweets(context: CallbackContext):
-    tweet_urls = await redis_client.smembers("tweet_url_to_be_sent")
+async def send_tweets(context: CallbackContext) -> None:
+    logger.debug("Sending queued tweets...")
+
+    # Get all queued tweet URLs
+    tweet_urls = await redis_client.lrange(f"tweets:urls:queue", 0, -1)
     if not tweet_urls:
-        logger.debug("No tweet_url_to_be_sent found, skipping")
         return
 
     for tweet_url in tweet_urls:
-        twitter_id = re.search(r"https://x\.com/(\w+)/status/(\d+)", tweet_url).group(1)
+        try:
+            # Extract username from URL
+            username = tweet_url.split("/")[3].lower()
+            
+            # Get target users
+            target_users = await redis_client.smembers(f"tweets:targets:user:{username}")
+            if not target_users:
+                continue
 
-        for chat_id in await redis_client.smembers(f"twitter_send_target:{twitter_id}"):
-            chat_id = int(chat_id)
-            try:
+            # Send to each target user
+            for user_id in target_users:
                 await send_tweet(
                     url=tweet_url,
                     context=context,
-                    user_id=chat_id,
-                    chat_id=chat_id,
+                    user_id=int(user_id),
+                    chat_id=int(user_id),
                     can_ignore=True
                 )
-                logger.info(f"Sent {tweet_url} to chat {chat_id}")
-            except Exception as e:
-                logger.error(f"Error sending tweet {tweet_url} to chat {chat_id}: {e}")
 
-        # mark the tweet as sent
-        await redis_client.set(f"tweet_id_sent:{tweet_url}", 1)
-        await redis_client.srem("tweet_url_to_be_sent", tweet_url)
+            # Remove from queue
+            await redis_client.lrem(f"tweets:urls:queue", 1, tweet_url)
 
-        await asyncio.sleep(random.randint(2, 4))
+        except Exception as e:
+            logger.error(f"Error sending tweet {tweet_url}: {e}", exc_info=True)

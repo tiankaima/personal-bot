@@ -129,9 +129,10 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
         else:
             logger.warning(f"Context not found for replied message {replied_message_id}")
     else:
+        system_prompt = await get_redis_value(f"user:{user_id}:system_prompt", DEFAULT_SYSTEM_PROMPT)
         messages = [{
             "role": "system",
-            "content": DEFAULT_SYSTEM_PROMPT
+            "content": system_prompt
         }]
 
     messages.append({

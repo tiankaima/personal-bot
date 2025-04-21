@@ -9,13 +9,16 @@ from html.parser import HTMLParser
 import httpx
 from datetime import datetime, timedelta
 from functools import wraps
-from typing import Callable, Any, Optional, TypeVar, Union
+from typing import Callable, Any, Optional, TypeVar, Union, Coroutine
 from telegram import Update
-from telegram.ext import ContextTypes
+from telegram.ext import ContextTypes, CallbackContext
+import os
 
 from core import logger, redis_client
 
 T = TypeVar('T')
+
+ADMIN_CHAT_ID_LIST = [int(id) for id in os.getenv('ADMIN_CHAT_ID_LIST', '').split(',') if id]
 
 
 async def get_redis_value(key: str, default: Optional[T] = None) -> Optional[str]:
@@ -178,3 +181,13 @@ def rate_limit(time_window: timedelta, limit: int):
             return await func(update, context)
         return wrapper
     return decorator
+
+
+def admin_required(func: Callable[[Update, CallbackContext], Coroutine]):
+    @wraps(func)
+    async def wrapper(update: Update, context: CallbackContext, *args, **kwargs):
+        if update.effective_chat.id not in ADMIN_CHAT_ID_LIST:
+            logger.warning(f"Unauthorized access to {func.__name__} from chat_id={update.effective_chat.id} user_id={update.effective_user.id}")
+            return
+        return await func(update, context, *args, **kwargs)
+    return wrapper

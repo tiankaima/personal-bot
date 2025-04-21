@@ -181,7 +181,7 @@ async def send_pixiv_novel_streaming(
     translated_content = []
     message_context = []
     translated_context = []
-    
+
     # Initialize message objects for streaming
     current_reply_obj = None
     reply_msg = ""
@@ -190,15 +190,15 @@ async def send_pixiv_novel_streaming(
     replies = []
     TELEGRAM_MESSAGE_MAX_LENGTH = 4000
     CUT_CHARACTERS = [' ', '\n']
-    
+
     async def update_reply_msg_to_user(chunk):
         nonlocal reply_msg, reply_msg_start, reply_msg_last_sent_end_pos, current_reply_obj, replies
-        
+
         reply_msg += chunk
-        
+
         if len(reply_msg[reply_msg_last_sent_end_pos:]) > 100 or reply_msg_last_sent_end_pos == 0:
             msg = f"<b>[{novel_id}] {novel['title']}</b>\n\n{reply_msg}"
-            
+
             try:
                 if len(msg[reply_msg_start:]) > TELEGRAM_MESSAGE_MAX_LENGTH:
                     # A cut & new reply is needed, determine where to cut the old message
@@ -208,7 +208,7 @@ async def send_pixiv_novel_streaming(
                     if trim_point == reply_msg_start:
                         # If we match back to the start, just give up and cut at the max length
                         trim_point = reply_msg_start + TELEGRAM_MESSAGE_MAX_LENGTH
-                    
+
                     if current_reply_obj is None:
                         # First message
                         current_reply_obj = await context.bot.send_message(
@@ -223,10 +223,10 @@ async def send_pixiv_novel_streaming(
                             msg[reply_msg_start:trim_point],
                             parse_mode="HTML"
                         )
-                    
+
                     reply_msg_last_sent_end_pos = trim_point
                     replies.append(current_reply_obj)
-                    
+
                     reply_msg_start = trim_point
                     current_reply_obj = await context.bot.send_message(
                         chat_id=chat_id,
@@ -249,7 +249,7 @@ async def send_pixiv_novel_streaming(
                             msg[reply_msg_start:],
                             parse_mode="HTML"
                         )
-                    
+
                     reply_msg_last_sent_end_pos = len(msg)
             except Exception as e:
                 logger.error(f"Failed to update reply message: {str(e)}", exc_info=True)
@@ -262,7 +262,7 @@ async def send_pixiv_novel_streaming(
             if current_batch.strip():
                 # Add current batch to message context
                 message_context.append(current_batch)
-                
+
                 # Translate current batch using streaming with context
                 translated = await translate_text_stream(
                     current_batch,
@@ -273,18 +273,18 @@ async def send_pixiv_novel_streaming(
                     message_context=message_context[:-1],  # Exclude current batch
                     translated_context=translated_context
                 )
-                
+
                 # Add to translated context
                 translated_context.append(translated)
                 translated_content.append(translated)
-            
+
             current_batch = paragraph + "\n\n"
 
     # Handle the last batch
     if current_batch.strip():
         # Add current batch to message context
         message_context.append(current_batch)
-        
+
         # Translate last batch using streaming with context
         translated = await translate_text_stream(
             current_batch,
@@ -295,11 +295,11 @@ async def send_pixiv_novel_streaming(
             message_context=message_context[:-1],  # Exclude current batch
             translated_context=translated_context
         )
-        
+
         # Add to translated context
         translated_context.append(translated)
         translated_content.append(translated)
-    
+
     # Send any remaining content
     if reply_msg and reply_msg_last_sent_end_pos < len(reply_msg):
         msg = f"<b>[{novel_id}] {novel['title']}</b>\n\n{reply_msg}"

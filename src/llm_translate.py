@@ -34,8 +34,8 @@ async def translate_text(text: str, openai_api_key: str, openai_api_endpoint: st
             translated_text = response.choices[0].message.content
 
             # remove anything in <think></think>
-            #translated_text = re.sub(r'<think>(.|\n)*</think>', '', translated_text)
-            #translated_text = re.sub(r'<.*?>', '', translated_text)
+            # translated_text = re.sub(r'<think>(.|\n)*</think>', '', translated_text)
+            # translated_text = re.sub(r'<.*?>', '', translated_text)
 
             return translated_text
 
@@ -111,7 +111,7 @@ async def translate_text_stream(
 ) -> str:
     """
     Stream translation results in real-time using a callback function.
-    
+
     Args:
         text: The text to translate
         openai_api_key: OpenAI API key
@@ -120,7 +120,7 @@ async def translate_text_stream(
         callback: Callback function that receives translated chunks as they become available
         message_context: List of previous original text chunks for context
         translated_context: List of previous translated text chunks for context
-        
+
     Returns:
         The complete translated text
     """
@@ -142,13 +142,13 @@ async def translate_text_stream(
 - 不要输出任何除了翻译内容之外的内容。
 """}
     ]
-    
+
     # Add context if available
     if message_context and translated_context and len(message_context) == len(translated_context):
         for orig, trans in zip(message_context, translated_context):
             messages.append({"role": "user", "content": orig})
             messages.append({"role": "assistant", "content": trans})
-    
+
     # Add the current text to translate
     messages.append({"role": "user", "content": text})
 
@@ -162,22 +162,22 @@ async def translate_text_stream(
 
             full_translation = ""
             buffer = ""
-            
+
             async for chunk in stream:
                 if chunk.choices[0].delta.content:
                     content = chunk.choices[0].delta.content
                     buffer += content
                     full_translation += content
-                    
+
                     # When buffer reaches a certain size, send it to the callback
                     if len(buffer) >= 50 or '\n' in buffer:
                         await callback(buffer)
                         buffer = ""
-            
+
             # Send any remaining content in the buffer
             if buffer:
                 await callback(buffer)
-                
+
             return full_translation
 
         except Exception as e:

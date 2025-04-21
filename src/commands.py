@@ -38,7 +38,7 @@ Available commands:
 /reset_system_prompt - Reset to default system prompt
 /show_system_prompt - Show your current system prompt
 """
-    
+
     if update.effective_chat.id in ADMIN_CHAT_ID_LIST:
         help_text += """
 Admin commands:
@@ -47,9 +47,9 @@ Admin commands:
 /del_redis <key> - Delete Redis key
 /list_redis <pattern> - List Redis keys matching pattern
 """
-    
+
     await update.effective_message.reply_text(help_text, reply_to_message_id=update.effective_message.message_id)
-    
+
 """
 Send this to BotFather for command autocompletion:
 
@@ -184,6 +184,7 @@ subscribe_twitter_user_command = call_function_with_one_param_command(subscribe_
 unsubscribe_twitter_user_command = call_function_with_one_param_command(unsubscribe_twitter_user)
 list_twitter_subscription_command = call_function_command(list_twitter_subscription)
 
+
 async def set_system_prompt_command(update: Update, context: CallbackContext) -> None:
     if not context.args:
         await update.effective_message.reply_text(
@@ -197,10 +198,12 @@ async def set_system_prompt_command(update: Update, context: CallbackContext) ->
     await redis_client.set(f"user:{user_id}:system_prompt", system_prompt)
     await update.effective_message.set_reaction("👌")
 
+
 async def reset_system_prompt_command(update: Update, context: CallbackContext) -> None:
     user_id = update.effective_message.from_user.id
     await redis_client.delete(f"user:{user_id}:system_prompt")
     await update.effective_message.set_reaction("👌")
+
 
 async def show_system_prompt_command(update: Update, context: CallbackContext) -> None:
     user_id = update.effective_message.from_user.id
@@ -211,6 +214,7 @@ async def show_system_prompt_command(update: Update, context: CallbackContext) -
         f"Your current system prompt:\n\n{system_prompt}",
         reply_to_message_id=update.effective_message.message_id
     )
+
 
 @admin_required
 async def get_redis_command(update: Update, context: CallbackContext) -> None:
@@ -225,6 +229,7 @@ async def get_redis_command(update: Update, context: CallbackContext) -> None:
     else:
         await update.effective_message.reply_text(f"Key: {key}\nValue: {value}", reply_to_message_id=update.effective_message.message_id)
 
+
 @admin_required
 async def set_redis_command(update: Update, context: CallbackContext) -> None:
     if not context.args or len(context.args) < 2:
@@ -235,6 +240,7 @@ async def set_redis_command(update: Update, context: CallbackContext) -> None:
     value = ' '.join(context.args[1:])
     await redis_client.set(key, value)
     await update.effective_message.set_reaction("👌")
+
 
 @admin_required
 async def del_redis_command(update: Update, context: CallbackContext) -> None:
@@ -249,18 +255,19 @@ async def del_redis_command(update: Update, context: CallbackContext) -> None:
     else:
         await update.effective_message.reply_text(f"Key '{key}' not found", reply_to_message_id=update.effective_message.message_id)
 
+
 @admin_required
 async def list_redis_command(update: Update, context: CallbackContext) -> None:
     # Get pattern and check for batch mode
     pattern = context.args[0] if context.args else "*"
     is_batch_mode = pattern.startswith(';')
-    
+
     # Remove ; from pattern if in batch mode
     if is_batch_mode:
         pattern = pattern[1:]
-    
+
     keys = await redis_client.keys(pattern)
-    
+
     if not keys:
         await update.effective_message.reply_text(f"No keys found matching pattern '{pattern}'", reply_to_message_id=update.effective_message.message_id)
         return
@@ -271,7 +278,7 @@ async def list_redis_command(update: Update, context: CallbackContext) -> None:
         total_keys = len(keys)
         for i in range(0, total_keys, batch_size):
             batch = keys[i:i + batch_size]
-            message = f"Keys matching pattern '{pattern}' (batch {i//batch_size + 1}/{(total_keys-1)//batch_size + 1}):\n\n"
+            message = f"Keys matching pattern '{pattern}' (batch {i // batch_size + 1}/{(total_keys - 1) // batch_size + 1}):\n\n"
             for key in batch:
                 message += f"• {key}\n"
             await update.effective_message.reply_text(message, reply_to_message_id=update.effective_message.message_id)
@@ -281,8 +288,8 @@ async def list_redis_command(update: Update, context: CallbackContext) -> None:
         message = f"Keys matching pattern '{pattern}' (showing first 20):\n\n"
         for key in keys:
             message += f"• {key}\n"
-        
+
         if len(keys) >= 20:
             message += "\nNote: Showing first 20 keys. Use /list_redis ;<pattern> to see all keys in batches."
-        
+
         await update.effective_message.reply_text(message, reply_to_message_id=update.effective_message.message_id)

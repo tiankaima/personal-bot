@@ -75,7 +75,7 @@ def clean_html(html: str) -> str:
 
         def handle_endtag(self, tag):
             nonlocal result
-            if tag in ACCEPTABLE_HTML_TAGS and tag_stack[-1] == tag:
+            if tag in ACCEPTABLE_HTML_TAGS and tag_stack and tag_stack[-1] == tag:
                 tag_stack.pop()
                 result += f"</{tag}>"
             else:
@@ -129,7 +129,7 @@ def clean_web_html(html: str) -> str:
 
         def handle_data(self, data):
             nonlocal result
-            if len(tag_stack) and tag_stack[-1] in TAGS_TO_KEEP:
+            if tag_stack and tag_stack[-1] in TAGS_TO_KEEP:
                 result += data
 
     parser = HTMLCleaner()

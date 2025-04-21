@@ -17,6 +17,7 @@ from utils import clean_html, get_web_content, rate_limit, get_redis_value
 INTERACTION_LIMIT = 10
 TIME_WINDOW = timedelta(minutes=1)
 TELEGRAM_MESSAGE_MAX_LENGTH = 2000
+MESSAGE_SEND_BUFFER_MAX = 200
 CUT_CHARACTERS = [' ', '\n']
 MAX_RETRIES = 10
 TOOLS: List[ChatCompletionToolParam] = [
@@ -81,7 +82,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
     if not update.message or not update.message.from_user:
         return
 
-    if not update.message.text or not len(update.message.text):
+    if not update.message.text or not update.message.text:
         logger.debug(f"Empty message received from user {user_id}")
         return
 
@@ -235,14 +236,14 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
 
             reply_msg += chunk.choices[0].delta.content or ""
 
-            if len(reply_msg[reply_msg_last_sent_end_pos:]) > 200 or reply_msg_last_sent_end_pos == 0:
+            if len(reply_msg[reply_msg_last_sent_end_pos:]) > MESSAGE_SEND_BUFFER_MAX:
                 await update_reply_msg_to_user()
 
-        if len(reply_msg.strip(" \n\t")) > 0:
+        if reply_msg[reply_msg_last_sent_end_pos:].strip(" \n\t"):
             await update_reply_msg_to_user()
             replies.append(current_reply_obj)
 
-        if len(tool_calls) > 0:
+        if tool_calls:
             tool_calls_json = [
                 {
                     "id": tool_call.id,
@@ -283,7 +284,7 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
             # store message to Redis
             await redis_client.hset(user_key, str(reply.message_id), json.dumps(messages))
 
-        if no_tool_call and len(reply_msg.strip(" \n\t")) > 0:
+        if no_tool_call and reply_msg.strip(" \n\t"):
             for reply in replies:
                 await redis_client.hset(user_key, str(reply.message_id), json.dumps(messages))
             logger.info(f"Successfully processed message for user {user_id}")
@@ -291,7 +292,8 @@ async def handle_message(update: Update, context: CallbackContext) -> None:
     else:
         logger.error(f"Failed to process message after {MAX_RETRIES} attempts for user {user_id}")
         await update.message.reply_text(
-            "I'm sorry, but I'm having trouble understanding your message. Please try again.")
+            "I'm sorry, but I'm having trouble understanding your message. Please try again."
+        )
         return
 
     logger.debug(f"Message handling completed for user {user_id}")

@@ -178,7 +178,8 @@ async def unsubscribe_twitter_user(twitter_username: str, chat_id: int) -> str |
     return f"Unsubscribed from @{twitter_username}"
 
 
-async def get_all_subscribed_users(chat_id: int) -> str | None:
+async def list_twitter_subscription(chat_id: int) -> str:
+    """List all Twitter users that the chat is subscribed to."""
     subscribed_users = await redis_client.smembers(f"tweets:subscriptions:user:{chat_id}")
     if not subscribed_users:
         return "You are not subscribed to any Twitter users."
@@ -382,7 +383,7 @@ async def send_tweets(context: CallbackContext) -> None:
         try:
             # Extract username from URL
             username = tweet_url.split("/")[3].lower()
-            
+
             # Get target users
             target_users = await redis_client.smembers(f"tweets:targets:user:{username}")
             if not target_users:

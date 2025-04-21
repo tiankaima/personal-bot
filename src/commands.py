@@ -5,7 +5,7 @@ from telegram import Update
 from telegram.ext import CallbackContext
 
 from core import redis_client, logger
-from tweet import subscribe_twitter_user, unsubscribe_twitter_user, get_all_subscribed_users
+from tweet import subscribe_twitter_user, unsubscribe_twitter_user, list_twitter_subscription
 from utils import get_redis_value, admin_required, ADMIN_CHAT_ID_LIST
 
 ADMIN_CHAT_ID_LIST = [int(id) for id in os.getenv('ADMIN_CHAT_ID_LIST', '').split(',') if id]
@@ -33,8 +33,7 @@ Available commands:
 /set_pixiv_streaming_translation <true/false>
 /subscribe_twitter_user <twitter_username>
 /unsubscribe_twitter_user <twitter_username>
-/get_all_subscribed_users
-/list_twitter_subscription - List all your subscribed Twitter users
+/list_twitter_subscription
 /set_system_prompt <your_system_prompt> - Set your custom system prompt
 /reset_system_prompt - Reset to default system prompt
 /show_system_prompt - Show your current system prompt
@@ -67,7 +66,6 @@ set_pixiv_direct_translation - <true/false> - Enable or disable direct Pixiv tra
 set_pixiv_streaming_translation - <true/false> - Enable or disable streaming Pixiv translation
 subscribe_twitter_user - <twitter_username> - Subscribe to a Twitter user's updates
 unsubscribe_twitter_user - <twitter_username> - Unsubscribe from a Twitter user's updates
-get_all_subscribed_users - List all subscribed Twitter users
 list_twitter_subscription - List all your subscribed Twitter users
 set_system_prompt - <your_system_prompt> - Set your custom system prompt for the AI
 reset_system_prompt - Reset to default system prompt
@@ -184,7 +182,7 @@ set_pixiv_streaming_translation_command = set_key_command('pixiv_streaming_trans
 
 subscribe_twitter_user_command = call_function_with_one_param_command(subscribe_twitter_user)
 unsubscribe_twitter_user_command = call_function_with_one_param_command(unsubscribe_twitter_user)
-get_all_subscribed_users_command = call_function_command(get_all_subscribed_users)
+list_twitter_subscription_command = call_function_command(list_twitter_subscription)
 
 async def set_system_prompt_command(update: Update, context: CallbackContext) -> None:
     if not context.args:
@@ -211,26 +209,6 @@ async def show_system_prompt_command(update: Update, context: CallbackContext) -
         system_prompt = "Using default system prompt"
     await update.effective_message.reply_text(
         f"Your current system prompt:\n\n{system_prompt}",
-        reply_to_message_id=update.effective_message.message_id
-    )
-
-async def list_twitter_subscription_command(update: Update, context: CallbackContext) -> None:
-    user_id = update.effective_message.from_user.id
-    subscribed_users = await redis_client.smembers(f"telegram_sub_target:{user_id}")
-    
-    if not subscribed_users:
-        await update.effective_message.reply_text(
-            "You are not subscribed to any Twitter users.",
-            reply_to_message_id=update.effective_message.message_id
-        )
-        return
-    
-    message = "Your subscribed Twitter users:\n\n"
-    for username in subscribed_users:
-        message += f"• @{username}\n"
-    
-    await update.effective_message.reply_text(
-        message,
         reply_to_message_id=update.effective_message.message_id
     )
 

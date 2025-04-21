@@ -334,6 +334,7 @@ async def fetch_tweets(twitter_id: str) -> list[str]:
             headers=HEADERS,
             timeout=10,
         )
+        logger.debug(f"Response: {response.text}")
         tweet_ids = re.findall(r"tweet-(\d{19})", response.text)
         tweet_urls = [f"https://x.com/{twitter_id}/status/{tweet_id}" for tweet_id in tweet_ids]
         return tweet_urls
@@ -352,23 +353,26 @@ async def check_for_new_tweets(context: CallbackContext) -> None:
         logger.debug("No Twitter users to check")
         return
 
-    for username in twitter_usernames:
-        try:
-            tweet_urls = await fetch_tweets(username)
-            for tweet_url in tweet_urls:
-                # Extract post ID from URL
-                post_id = tweet_url.split("/")[-1]
-                # Check if tweet was already sent
-                if await redis_client.exists(f"tweets:sent:{username}:{post_id}"):
-                    continue
+    # Randomly pick one user to check
+    username = random.choice(list(twitter_usernames))
+    logger.debug(f"Randomly selected @{username} to check")
 
-                # Add to queue
-                await redis_client.rpush(f"tweets:urls:queue", tweet_url)
-                # Mark as sent
-                await redis_client.set(f"tweets:sent:{username}:{post_id}", 1)
+    try:
+        tweet_urls = await fetch_tweets(username)
+        for tweet_url in tweet_urls:
+            # Extract post ID from URL
+            post_id = tweet_url.split("/")[-1]
+            # Check if tweet was already sent
+            if await redis_client.exists(f"tweets:sent:{username}:{post_id}"):
+                continue
 
-        except Exception as e:
-            logger.error(f"Error checking tweets for @{username}: {e}", exc_info=True)
+            # Add to queue
+            await redis_client.rpush(f"tweets:urls:queue", tweet_url)
+            # Mark as sent
+            await redis_client.set(f"tweets:sent:{username}:{post_id}", 1)
+
+    except Exception as e:
+        logger.error(f"Error checking tweets for @{username}: {e}", exc_info=True)
 
 
 async def send_tweets(context: CallbackContext) -> None:

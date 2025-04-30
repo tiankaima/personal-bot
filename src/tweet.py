@@ -201,9 +201,11 @@ async def send_tweet(
 ) -> None:
     async with httpx.AsyncClient() as client:
         url = url.replace("x.com", "twitter.com").replace('twitter.com', 'api.fxtwitter.com')
-
         response = await client.get(url, timeout=10)
-        info = json.loads(response.text)
+    info = json.loads(response.text)
+
+    if info['code'] == 404:
+        return
 
     create_timestamp = datetime.fromtimestamp(info['tweet']['created_timestamp'])
     create_timestamp_str = create_timestamp.strftime("%Y/%m/%d %H:%M:%S")
@@ -267,13 +269,17 @@ async def send_tweet(
         try:
             medias = []
 
-            for media in info['tweet']['media']['all']:
-                if media['type'] == 'photo':
-                    medias.append(InputMediaPhoto(media['url']))
-                elif media['type'] == 'video':
-                    medias.append(InputMediaVideo(media['variants'][3]['url']))
-                elif media['type'] == 'gif':
-                    medias.append(InputMediaVideo(media['variants'][0]['url']))
+            if 'external' in info['tweet']['media']:
+                medias.append(InputMediaPhoto(info['tweet']['media']['external']['thumbnail_url']))
+
+            else:
+                for media in info['tweet']['media']['all']:
+                    if media['type'] == 'photo':
+                        medias.append(InputMediaPhoto(media['url']))
+                    elif media['type'] == 'video':
+                        medias.append(InputMediaVideo(media['variants'][3]['url']))
+                    elif media['type'] == 'gif':
+                        medias.append(InputMediaVideo(media['variants'][0]['url']))
 
             await context.bot.send_media_group(
                 chat_id=chat_id,
@@ -289,16 +295,22 @@ async def send_tweet(
             medias = []
 
             async with httpx.AsyncClient() as client:
-                for media in info['tweet']['media']['all']:
-                    if media['type'] == 'photo':
-                        response = await client.get(media['url'])
-                        medias.append(InputMediaPhoto(response.content))
-                    elif media['type'] == 'video':
-                        response = await client.get(media['variants'][3]['url'])
-                        medias.append(InputMediaVideo(response.content))
-                    elif media['type'] == 'gif':
-                        response = await client.get(media['variants'][0]['url'])
-                        medias.append(InputMediaVideo(response.content))
+
+                if 'external' in info['tweet']['media']:
+                    response = await client.get(info['tweet']['media']['external']['thumbnail_url'])
+                    medias.append(InputMediaPhoto(response.content))
+
+                else:
+                    for media in info['tweet']['media']['all']:
+                        if media['type'] == 'photo':
+                            response = await client.get(media['url'])
+                            medias.append(InputMediaPhoto(response.content))
+                        elif media['type'] == 'video':
+                            response = await client.get(media['variants'][3]['url'])
+                            medias.append(InputMediaVideo(response.content))
+                        elif media['type'] == 'gif':
+                            response = await client.get(media['variants'][0]['url'])
+                            medias.append(InputMediaVideo(response.content))
 
             await context.bot.send_media_group(
                 chat_id=chat_id,

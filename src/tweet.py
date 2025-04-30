@@ -347,8 +347,9 @@ async def fetch_tweets(twitter_id: str) -> list[str]:
             timeout=10,
         )
         logger.debug(f"Response: {response.text}")
-        tweet_ids = re.findall(r"tweet-(\d{19})", response.text)
-        tweet_urls = [f"https://x.com/{twitter_id}/status/{tweet_id}" for tweet_id in tweet_ids]
+        # tweet_ids = re.findall(r"tweet-(\d{19})", response.text)
+        # tweet_urls = [f"https://x.com/{twitter_id}/status/{tweet_id}" for tweet_id in tweet_ids]
+        tweet_urls = re.findall(r"https://x\.com/{twitter_id}/status/(\d+)", response.text)
         return tweet_urls
 
 

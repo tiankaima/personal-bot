@@ -104,7 +104,6 @@ an additional set is used to cache the fetched tweet urls:
 tweet_url_to_be_sent: [tweet_url1, tweet_url2, ...]
 """
 
-import asyncio
 import json
 import os
 import random
@@ -125,6 +124,7 @@ if not TWITTER_COOKIE:
 
 SEND_ONLY_WITH_MEDIA = os.getenv("SEND_ONLY_WITH_MEDIA", "true").lower() == "true"
 IGNORE_RETWEETS = os.getenv("IGNORE_RETWEETS", "true").lower() == "true"
+SAVE_TWITTER_RESPONSE = os.getenv("SAVE_TWITTER_RESPONSE", "false").lower() == "true"
 
 RAW_HEADERS = f"""
 Host: syndication.twitter.com
@@ -346,7 +346,8 @@ async def fetch_tweets(twitter_id: str) -> list[str]:
             headers=HEADERS,
             timeout=10,
         )
-        logger.debug(f"Response: {response.text}")
+        if SAVE_TWITTER_RESPONSE:
+            logger.debug(f"Response: {response.text}")
         # tweet_ids = re.findall(r"tweet-(\d{19})", response.text)
         # tweet_urls = [f"https://x.com/{twitter_id}/status/{tweet_id}" for tweet_id in tweet_ids]
         tweet_urls = re.findall(r"https://x\.com/{twitter_id}/status/(\d+)", response.text)

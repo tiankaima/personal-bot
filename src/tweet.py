@@ -340,7 +340,7 @@ async def fetch_tweets(twitter_id: str) -> list[str]:
 
     # visit https://syndication.twitter.com/srv/timeline-profile/screen-name/{twitter_id}, regex all x.com/@twitter_id/status/...
     # and return the list of tweets
-    async with httpx.AsyncClient(proxy="http://meta:7890") as client:
+    async with httpx.AsyncClient() as client:
         response = await client.get(
             f"https://syndication.twitter.com/srv/timeline-profile/screen-name/{twitter_id}",
             headers=HEADERS,

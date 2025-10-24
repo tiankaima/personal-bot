@@ -19,12 +19,6 @@ services:
         ports:
             - 5678:5678
 
-    meta:
-        container_name: meta
-        image: docker.io/metacubex/mihomo:Alpha
-        volumes:
-            - ./config.yaml:/root/.config/mihomo/config.yaml
-
     redis:
         image: "redis:latest"
         volumes:

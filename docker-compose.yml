@@ -16,12 +16,6 @@ services:
             watch:
                 - action: rebuild
                   path: ./src
-    
-    meta:
-        container_name: meta
-        image: docker.io/metacubex/mihomo:Alpha
-        volumes:
-            - ./config.yaml:/root/.config/mihomo/config.yaml
 
     redis:
         container_name: redis
